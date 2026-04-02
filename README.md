@@ -12,14 +12,14 @@ GitPulse is a dark, neon-styled React dashboard for tracking GitHub contribution
 
    copy .env.example .env
 
-3. Add your GitHub personal access token to `.env`:
+3. Add your Firebase config values to `.env`:
 
-   VITE_GITHUB_TOKEN=your_token_here
-   VITE_GITHUB_CLIENT_ID=your_oauth_app_client_id
+   VITE_FIREBASE_API_KEY=...
+   VITE_FIREBASE_AUTH_DOMAIN=...
+   VITE_FIREBASE_PROJECT_ID=...
+   VITE_FIREBASE_APP_ID=...
 
-4. Create a GitHub OAuth App if you have not already, then copy the Client ID into `.env`.
-
-   The app uses GitHub device flow, so you do not need a backend.
+4. In Firebase Console, enable Authentication and turn on the GitHub provider.
 
 5. Start the app:
 
@@ -31,11 +31,10 @@ GitPulse is a dark, neon-styled React dashboard for tracking GitHub contribution
 - 30-day progress bar.
 - Daily safe / risk status.
 - Responsive heatmap placeholder.
-- GitHub OAuth device-flow sign-in for the authenticated viewer account.
+- Firebase Authentication with GitHub provider sign-in.
 - 8:00 PM browser notification reminder when no commit is detected.
 
 ## Notes
 
-- Leave the username blank, or type `me`, to load the authenticated GitHub account.
-- The in-app sign-in flow uses GitHub device authorization and requires an OAuth App client ID.
+- The dashboard is login-first: no data is shown until Firebase GitHub login succeeds.
 - Notifications require browser permission.

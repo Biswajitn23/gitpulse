@@ -72,6 +72,50 @@ function calculateCurrentStreak(days, hasContributedToday, hasContributedYesterd
   return streak;
 }
 
+function buildRepoContributionsByDate(commitContributionsByRepository) {
+  const dateBuckets = new Map();
+
+  for (const repoContribution of commitContributionsByRepository || []) {
+    const repository = repoContribution.repository;
+    const nodes = repoContribution?.contributions?.nodes || [];
+
+    for (const node of nodes) {
+      const dateKey = toLocalDateKey(new Date(node.occurredAt));
+      if (!dateBuckets.has(dateKey)) {
+        dateBuckets.set(dateKey, new Map());
+      }
+
+      const repoMap = dateBuckets.get(dateKey);
+      const existing = repoMap.get(repository.nameWithOwner) || {
+        nameWithOwner: repository.nameWithOwner,
+        url: repository.url,
+        count: 0,
+      };
+      existing.count += 1;
+      repoMap.set(repository.nameWithOwner, existing);
+    }
+  }
+
+  return Object.fromEntries(
+    [...dateBuckets.entries()].map(([dateKey, repoMap]) => {
+      const repos = [...repoMap.values()].sort((a, b) => b.count - a.count);
+      return [dateKey, repos];
+    }),
+  );
+}
+
+function buildCommitCountByDate(repoContributionsByDate) {
+  const entries = Object.entries(repoContributionsByDate || {});
+  const commitCountByDate = new Map();
+
+  for (const [dateKey, repos] of entries) {
+    const totalCommits = (repos || []).reduce((total, repo) => total + repo.count, 0);
+    commitCountByDate.set(dateKey, totalCommits);
+  }
+
+  return commitCountByDate;
+}
+
 export async function fetchGithubStreak(username, token = import.meta.env.VITE_GITHUB_TOKEN) {
   const trimmedUsername = username?.trim();
   const useViewer = !trimmedUsername || trimmedUsername.toLowerCase() === 'me' || trimmedUsername.toLowerCase() === 'viewer';
@@ -84,38 +128,69 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-  const query = `
-    query($login: String!, $from: DateTime!, $to: DateTime!) {
-      viewer {
-        login
-        contributionsCollection(from: $from, to: $to) {
-          contributionCalendar {
-            totalContributions
-            weeks {
-              contributionDays {
-                date
-                contributionCount
+  const query = useViewer
+    ? `
+      query($from: DateTime!, $to: DateTime!) {
+        viewer {
+          login
+          name
+          avatarUrl
+          contributionsCollection(from: $from, to: $to) {
+            commitContributionsByRepository(maxRepositories: 100) {
+              repository {
+                nameWithOwner
+                url
+              }
+              contributions(first: 100) {
+                nodes {
+                  occurredAt
+                }
+              }
+            }
+            contributionCalendar {
+              totalContributions
+              weeks {
+                contributionDays {
+                  date
+                  contributionCount
+                }
               }
             }
           }
         }
       }
-      user(login: $login) {
-        login
-        contributionsCollection(from: $from, to: $to) {
-          contributionCalendar {
-            totalContributions
-            weeks {
-              contributionDays {
-                date
-                contributionCount
+    `
+    : `
+      query($login: String!, $from: DateTime!, $to: DateTime!) {
+        user(login: $login) {
+          login
+          name
+          avatarUrl
+          contributionsCollection(from: $from, to: $to) {
+            commitContributionsByRepository(maxRepositories: 100) {
+              repository {
+                nameWithOwner
+                url
+              }
+              contributions(first: 100) {
+                nodes {
+                  occurredAt
+                }
+              }
+            }
+            contributionCalendar {
+              totalContributions
+              weeks {
+                contributionDays {
+                  date
+                  contributionCount
+                }
               }
             }
           }
         }
       }
-    }
-  `;
+    `;
 
   const response = await fetch(GITHUB_GRAPHQL_ENDPOINT, {
     method: 'POST',
@@ -125,11 +200,16 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
     },
     body: JSON.stringify({
       query,
-      variables: {
-        login: trimmedUsername,
-        from: oneYearAgo.toISOString(),
-        to: now.toISOString(),
-      },
+      variables: useViewer
+        ? {
+            from: oneYearAgo.toISOString(),
+            to: now.toISOString(),
+          }
+        : {
+            login: trimmedUsername,
+            from: oneYearAgo.toISOString(),
+            to: now.toISOString(),
+          },
     }),
   });
 
@@ -153,28 +233,41 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
     throw new Error(message);
   }
 
-  const viewer = payload?.data?.viewer;
-  const user = useViewer ? viewer : payload?.data?.user;
+  const user = useViewer ? payload?.data?.viewer : payload?.data?.user;
 
   if (!user) {
     throw new Error(useViewer ? 'Unable to load the authenticated GitHub account.' : 'Invalid GitHub username.');
   }
 
   const contributionCalendar = user.contributionsCollection.contributionCalendar;
-  const contributionDays = contributionCalendar.weeks.flatMap((week) => week.contributionDays);
+  const repoContributionsByDate = buildRepoContributionsByDate(
+    user.contributionsCollection.commitContributionsByRepository,
+  );
+  const commitCountByDate = buildCommitCountByDate(repoContributionsByDate);
+  const contributionDays = contributionCalendar.weeks
+    .flatMap((week) => week.contributionDays)
+    .map((day) => ({
+      date: day.date,
+      contributionCount: commitCountByDate.get(day.date) || 0,
+    }));
   const dayMap = buildDayMap(contributionDays);
   const todayKey = toLocalDateKey(new Date());
   const yesterdayKey = toLocalDateKey(subtractDays(new Date(), 1));
   const hasContributedToday = (dayMap.get(todayKey) || 0) > 0;
   const hasContributedYesterday = (dayMap.get(yesterdayKey) || 0) > 0;
 
+  const totalCommits = contributionDays.reduce((total, day) => total + day.contributionCount, 0);
+
   return {
     username: user.login,
-    totalContributions: contributionCalendar.totalContributions,
+    displayName: user.name || user.login,
+    avatarUrl: user.avatarUrl || '',
+    totalContributions: totalCommits,
     currentStreak: calculateCurrentStreak(contributionDays, hasContributedToday, hasContributedYesterday),
     longestStreak: calculateLongestStreak(contributionDays),
     hasContributedToday,
     contributionDays,
+    repoContributionsByDate,
     fetchedAt: now.toISOString(),
   };
 }

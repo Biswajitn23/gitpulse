@@ -3,12 +3,19 @@ import { fetchGithubStreak } from '../lib/githubStreak';
 
 export function useGithubStreak(username, token = import.meta.env.VITE_GITHUB_TOKEN) {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(token));
   const [error, setError] = useState(null);
   const requestIdRef = useRef(0);
 
   const refresh = useMemo(() => {
     return async () => {
+      if (!token) {
+        setData(null);
+        setError(null);
+        setLoading(false);
+        return null;
+      }
+
       const requestId = ++requestIdRef.current;
       setLoading(true);
       setError(null);
