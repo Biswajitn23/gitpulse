@@ -21,6 +21,7 @@ import ProfilePage from './ProfilePage';
 const AUTH_STORAGE_KEY = 'gitpulse-github-token';
 const ACCOUNT_STORAGE_KEY = 'gitpulse-account-username';
 const ACCOUNT_AVATAR_STORAGE_KEY = 'gitpulse-account-avatar';
+const LAST_SIGNED_OUT_ACCOUNT_KEY = 'gitpulse-last-signed-out-account';
 const ALERTS_ENABLED_STORAGE_KEY = 'gitpulse-alerts-enabled';
 const EXPLICIT_LOGOUT_KEY = 'gitpulse-explicit-logout';
 const NOTIFICATION_CACHE_KEY = 'gitpulse-notification-cache';
@@ -787,7 +788,22 @@ export default function GitPulseDashboard() {
       const result = await signInWithPopup(auth, createGithubProvider());
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = sanitizeCredential(credential?.accessToken || '');
+      const signedInLogin = sanitizeCredential(result?.additionalUserInfo?.profile?.login || '');
+      const lastSignedOutAccount = sanitizeCredential(window.localStorage.getItem(LAST_SIGNED_OUT_ACCOUNT_KEY) || '');
+
+      if (lastSignedOutAccount && signedInLogin && signedInLogin.toLowerCase() === lastSignedOutAccount.toLowerCase()) {
+        try { await signOut(auth); } catch (signOutError) {}
+        setFirebaseUser(null);
+        setAuthToken('');
+        setAuthStep('error');
+        setAuthMessage('Please choose a different GitHub account to continue.');
+        return;
+      }
+
       window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      if (signedInLogin) {
+        window.localStorage.removeItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
+      }
       window.localStorage.setItem(AUTH_STORAGE_KEY, token);
       setAuthToken(token);
       setFirebaseUser(result.user);
@@ -796,12 +812,16 @@ export default function GitPulseDashboard() {
   };
 
   const handleSignOut = async () => {
-    try { await signOut(getFirebaseAuth()); } catch (e) {}
+    const lastAccount = sanitizeCredential(data?.username || restoredAccount || firebaseUser?.displayName || '');
     window.localStorage.setItem(EXPLICIT_LOGOUT_KEY, 'true');
-    setFirebaseUser(null); setAuthToken(''); setAuthStep('idle');
+    if (lastAccount) {
+      window.localStorage.setItem(LAST_SIGNED_OUT_ACCOUNT_KEY, lastAccount);
+    }
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
     window.localStorage.removeItem(ACCOUNT_AVATAR_STORAGE_KEY);
+    setFirebaseUser(null); setAuthToken(''); setAuthStep('idle');
+    try { await signOut(getFirebaseAuth()); } catch (e) {}
   };
 
   const handleOpenProfilePage = () => {
@@ -956,8 +976,13 @@ export default function GitPulseDashboard() {
         <div className="mx-auto flex h-auto max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:px-4 sm:h-16">
           <SiteBrand sizeClassName="h-8 w-8" textClassName="text-sm sm:text-base" />
           <div className="flex items-center gap-2 sm:gap-4">
-            <button onClick={handleOpenProfilePage} className={`md:hidden h-10 w-10 rounded-full overflow-hidden ring-2 bg-white/5 ${isGitHubPro ? 'ring-violet-400/60 shadow-[0_0_18px_rgba(168,85,247,0.22)]' : 'ring-emerald-500/30'}`}>
-              <img src={profileAvatar} className="h-full w-full object-cover" alt="" />
+            <button
+              onClick={handleOpenProfilePage}
+              className={`md:hidden h-10 w-10 rounded-full overflow-hidden transition-all ${isGitHubPro ? 'bg-[conic-gradient(from_180deg_at_50%_50%,#f5d0fe_0deg,#c084fc_120deg,#fbbf24_240deg,#f5d0fe_360deg)] p-[2px] shadow-[0_0_20px_rgba(168,85,247,0.35)] animate-pulse' : 'ring-2 bg-white/5 ring-emerald-500/30'}`}
+            >
+              <span className={`block h-full w-full rounded-full overflow-hidden ${isGitHubPro ? 'bg-[#020617]' : ''}`}>
+                <img src={profileAvatar} className={`h-full w-full object-cover ${isGitHubPro ? 'rounded-full ring-1 ring-white/15' : ''}`} alt="" />
+              </span>
             </button>
             <button onClick={handleOpenProfilePage} className={`hidden md:flex items-center gap-3 px-4 py-2 rounded-full border transition-colors text-left ${isGitHubPro ? 'bg-gradient-to-r from-violet-500/15 via-fuchsia-500/10 to-amber-500/10 border-violet-400/30 shadow-[0_0_22px_rgba(168,85,247,0.18)]' : 'bg-white/5 border-white/10 shadow-[0_0_18px_rgba(16,185,129,0.08)] hover:bg-white/10'}`}>
               <img src={profileAvatar} className={`h-8 w-8 rounded-full ring-2 ${isGitHubPro ? 'ring-violet-400/40' : 'ring-emerald-500/30'}`} alt="" />

@@ -37,6 +37,7 @@ export function getFirebaseAuth() {
 
 export function createGithubProvider() {
   const provider = new GithubAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
   provider.addScope('read:user');
   provider.addScope('user:email');
   provider.addScope('repo');
