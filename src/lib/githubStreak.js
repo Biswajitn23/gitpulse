@@ -116,6 +116,147 @@ function buildCommitCountByDate(repoContributionsByDate) {
   return commitCountByDate;
 }
 
+function formatClockTime(date) {
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function getContributionRole(profile) {
+  const commitCount = profile.totalCommitContributions || 0;
+  const pullRequestCount = profile.totalPullRequestContributions || 0;
+  const issueCount = profile.totalIssueContributions || 0;
+  const repositoryCount = profile.totalRepositoryContributions || 0;
+
+  if (pullRequestCount > commitCount && pullRequestCount >= issueCount) {
+    return 'Architect';
+  }
+
+  if (issueCount > commitCount && issueCount >= pullRequestCount) {
+    return 'Maintainer';
+  }
+
+  if (repositoryCount > commitCount) {
+    return 'Collaborator';
+  }
+
+  if (commitCount >= pullRequestCount && commitCount >= issueCount) {
+    return commitCount > 100 ? 'Builder' : 'Coder';
+  }
+
+  return 'Contributor';
+}
+
+function buildContributionWindow(commitContributionsByRepository) {
+  const timestamps = [];
+
+  for (const repoContribution of commitContributionsByRepository || []) {
+    for (const node of repoContribution?.contributions?.nodes || []) {
+      if (node?.occurredAt) {
+        timestamps.push(new Date(node.occurredAt));
+      }
+    }
+  }
+
+  if (!timestamps.length) {
+    return null;
+  }
+
+  const sorted = timestamps.sort((left, right) => left.getTime() - right.getTime());
+  return {
+    first: formatClockTime(sorted[0]),
+    last: formatClockTime(sorted[sorted.length - 1]),
+  };
+}
+
+function aggregateLanguageBytes(commitContributionsByRepository) {
+  const languages = new Map();
+
+  for (const repoContribution of commitContributionsByRepository || []) {
+    const repository = repoContribution?.repository;
+    const repoLanguageEdges = repository?.languages?.edges || [];
+
+    for (const language of repoLanguageEdges) {
+      const languageNode = language?.node || {};
+      const current = languages.get(languageNode.name) || {
+        name: languageNode.name,
+        color: languageNode.color || '#64748b',
+        bytes: 0,
+      };
+
+      current.bytes += language.size || 0;
+      if (languageNode.color) {
+        current.color = languageNode.color;
+      }
+      languages.set(languageNode.name, current);
+    }
+  }
+
+  const ordered = [...languages.values()].sort((left, right) => right.bytes - left.bytes);
+  const totalBytes = ordered.reduce((total, language) => total + language.bytes, 0) || 1;
+
+  return ordered
+    .filter((language) => {
+      const percentage = Math.round((language.bytes / totalBytes) * 100);
+      return percentage > 0;
+    })
+    .map((language) => ({
+      name: language.name,
+      color: language.color,
+      bytes: language.bytes,
+      percentage: Math.round((language.bytes / totalBytes) * 100),
+    }));
+}
+
+function aggregateTopRepositoryImpact(commitContributionsByRepository) {
+  const topRepositories = [...(commitContributionsByRepository || [])]
+    .map((repoContribution) => {
+      const repository = repoContribution?.repository;
+      const commits = (repoContribution?.contributions?.nodes || []).length;
+      return {
+        nameWithOwner: repository?.nameWithOwner || 'unknown',
+        url: repository?.url || `https://github.com/${repository?.nameWithOwner || ''}`,
+        stars: repository?.stargazerCount || 0,
+        forks: repository?.forkCount || 0,
+        commits,
+      };
+    })
+    .sort((left, right) => right.commits - left.commits)
+    .slice(0, 3);
+
+  const totalStars = topRepositories.reduce((total, repo) => total + repo.stars, 0);
+  const totalForks = topRepositories.reduce((total, repo) => total + repo.forks, 0);
+
+  return {
+    totalStars,
+    totalForks,
+    topRepositories,
+  };
+}
+
+async function fetchSocialAccounts(username, token) {
+  const endpoint = username
+    ? `https://api.github.com/users/${encodeURIComponent(username)}/social_accounts`
+    : 'https://api.github.com/user/social_accounts';
+
+  const response = await fetch(endpoint, {
+    headers: {
+      Authorization: `bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2026-03-10',
+    },
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = await response.json();
+  return Array.isArray(payload) ? payload : [];
+}
+
 function buildContributionDays(contributionCalendar) {
   return (contributionCalendar?.weeks || [])
     .flatMap((week) => week.contributionDays || [])
@@ -144,11 +285,56 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
           login
           name
           avatarUrl
+          bio
+          company
+          location
+          websiteUrl
+          twitterUsername
+          pronouns
+          url
+          status {
+            emoji
+            message
+            expiresAt
+            indicatesLimitedAvailability
+          }
+          followers {
+            totalCount
+          }
+          following {
+            totalCount
+          }
+          repositories(first: 100, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], orderBy: { field: PUSHED_AT, direction: DESC }) {
+            totalCount
+            nodes {
+              nameWithOwner
+              url
+              stargazerCount
+              forkCount
+              isFork
+              isPrivate
+            }
+          }
           contributionsCollection(from: $from, to: $to) {
+            totalCommitContributions
+            totalPullRequestContributions
+            totalIssueContributions
+            totalRepositoryContributions
             commitContributionsByRepository(maxRepositories: 100) {
               repository {
                 nameWithOwner
                 url
+                stargazerCount
+                forkCount
+                languages(first: 100) {
+                  edges {
+                    size
+                    node {
+                      name
+                      color
+                    }
+                  }
+                }
               }
               contributions(first: 100) {
                 nodes {
@@ -175,11 +361,56 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
           login
           name
           avatarUrl
+          bio
+          company
+          location
+          websiteUrl
+          twitterUsername
+          pronouns
+          url
+          status {
+            emoji
+            message
+            expiresAt
+            indicatesLimitedAvailability
+          }
+          followers {
+            totalCount
+          }
+          following {
+            totalCount
+          }
+          repositories(first: 100, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], orderBy: { field: PUSHED_AT, direction: DESC }) {
+            totalCount
+            nodes {
+              nameWithOwner
+              url
+              stargazerCount
+              forkCount
+              isFork
+              isPrivate
+            }
+          }
           contributionsCollection(from: $from, to: $to) {
+            totalCommitContributions
+            totalPullRequestContributions
+            totalIssueContributions
+            totalRepositoryContributions
             commitContributionsByRepository(maxRepositories: 100) {
               repository {
                 nameWithOwner
                 url
+                stargazerCount
+                forkCount
+                languages(first: 100) {
+                  edges {
+                    size
+                    node {
+                      name
+                      color
+                    }
+                  }
+                }
               }
               contributions(first: 100) {
                 nodes {
@@ -249,6 +480,7 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
   }
 
   const contributionCalendar = user.contributionsCollection.contributionCalendar;
+  const contributionStats = user.contributionsCollection;
   const repoContributionsByDate = buildRepoContributionsByDate(
     user.contributionsCollection.commitContributionsByRepository,
   );
@@ -260,17 +492,77 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
   const hasContributedYesterday = (dayMap.get(yesterdayKey) || 0) > 0;
 
   const totalCommits = contributionCalendar.totalContributions || contributionDays.reduce((total, day) => total + day.contributionCount, 0);
+  const socialAccounts = await fetchSocialAccounts(user.login, token);
+  const activityRole = getContributionRole(contributionStats);
+  const contributionWindow = buildContributionWindow(user.contributionsCollection.commitContributionsByRepository);
+  const totalImpact = aggregateTopRepositoryImpact(user.contributionsCollection.commitContributionsByRepository);
+  const languageBreakdown = aggregateLanguageBytes(user.contributionsCollection.commitContributionsByRepository);
+  const allRepositories = (user.repositories?.nodes || []).map((repository) => ({
+    nameWithOwner: repository?.nameWithOwner || 'unknown',
+    url: repository?.url || '',
+    stargazerCount: repository?.stargazerCount || 0,
+    forkCount: repository?.forkCount || 0,
+    isFork: Boolean(repository?.isFork),
+    isPrivate: Boolean(repository?.isPrivate),
+  }));
+
+  let isGitHubPro = false;
+  try {
+    const profileResponse = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (profileResponse.ok) {
+      const profilePayload = await profileResponse.json();
+      isGitHubPro = String(profilePayload?.plan?.name || '').toLowerCase() === 'pro';
+    }
+  } catch {
+    isGitHubPro = false;
+  }
 
   return {
     username: user.login,
     displayName: user.name || user.login,
     avatarUrl: user.avatarUrl || '',
+    bio: user.bio || '',
+    company: user.company || '',
+    location: user.location || '',
+    websiteUrl: user.websiteUrl || '',
+    twitterUsername: user.twitterUsername || '',
+    pronouns: user.pronouns || '',
+    profileUrl: user.url || '',
+    status: user.status ? {
+      emoji: user.status.emoji || '',
+      message: user.status.message || '',
+      expiresAt: user.status.expiresAt || null,
+      indicatesLimitedAvailability: Boolean(user.status.indicatesLimitedAvailability),
+    } : null,
+    followersCount: user.followers?.totalCount || 0,
+    followingCount: user.following?.totalCount || 0,
+    socialAccounts,
+    profileTimezone: null,
+    activityRole,
+    contributionWindow,
+    totalImpact,
+    languageBreakdown,
+    totalCommitContributions: contributionStats.totalCommitContributions || 0,
+    totalPullRequestContributions: contributionStats.totalPullRequestContributions || 0,
+    totalIssueContributions: contributionStats.totalIssueContributions || 0,
+    totalRepositoryContributions: contributionStats.totalRepositoryContributions || 0,
+    achievements: [],
+    isGitHubPro,
     totalContributions: totalCommits,
     currentStreak: calculateCurrentStreak(contributionDays, hasContributedToday, hasContributedYesterday),
     longestStreak: calculateLongestStreak(contributionDays),
     hasContributedToday,
     contributionDays,
     repoContributionsByDate,
+    allRepositories,
+    allRepositoriesCount: user.repositories?.totalCount || allRepositories.length,
+    commitContributionsByRepository: user.contributionsCollection.commitContributionsByRepository,
     fetchedAt: now.toISOString(),
   };
 }

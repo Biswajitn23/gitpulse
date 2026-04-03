@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BellRing,
   Flame,
+  Github,
   GitBranch,
-  ShieldCheck,
   Activity,
   RefreshCw,
   CalendarRange,
@@ -16,12 +16,115 @@ import {
 import { GithubAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { useGithubStreak } from '../hooks/useGithubStreak';
 import { createGithubProvider, getFirebaseAuth } from '../lib/firebase';
+import ProfilePage from './ProfilePage';
 
 const AUTH_STORAGE_KEY = 'gitpulse-github-token';
 const ACCOUNT_STORAGE_KEY = 'gitpulse-account-username';
 const ACCOUNT_AVATAR_STORAGE_KEY = 'gitpulse-account-avatar';
 const ALERTS_ENABLED_STORAGE_KEY = 'gitpulse-alerts-enabled';
+const EXPLICIT_LOGOUT_KEY = 'gitpulse-explicit-logout';
+const NOTIFICATION_CACHE_KEY = 'gitpulse-notification-cache';
 const DAILY_GOAL = 30;
+const ROLE_GUIDE = [
+  {
+    name: 'Builder',
+    condition: 'Most activity is commits with more than 100 commits.',
+    action: 'Ship code consistently. Focus on frequent commits and keep a steady coding cadence.',
+    challenge: 'Complete a 14-day coding streak with at least 8 high-focus days.',
+  },
+  {
+    name: 'Coder',
+    condition: 'Most activity is commits but commit count is 100 or less.',
+    action: 'Keep coding regularly and increase commit volume to reach Builder.',
+    challenge: 'Push code 5 days this week with clear, atomic commits.',
+  },
+  {
+    name: 'Architect',
+    condition: 'Pull requests are higher than commits and at least as high as issues.',
+    action: 'Open more pull requests, split work into reviewable PRs, and collaborate via code reviews.',
+    challenge: 'Open at least 4 PRs this week and request reviews for each.',
+  },
+  {
+    name: 'Maintainer',
+    condition: 'Issue contributions are higher than commits and at least as high as pull requests.',
+    action: 'Triaging, issue fixing, and project maintenance activities should be your main contribution type.',
+    challenge: 'Close 6 issues this week with labels, notes, and follow-up tasks.',
+  },
+  {
+    name: 'Collaborator',
+    condition: 'Repository contributions are higher than commits.',
+    action: 'Contribute across repositories, help in multiple projects, and expand cross-repo collaboration.',
+    challenge: 'Contribute to 3 different repositories in the next 7 days.',
+  },
+  {
+    name: 'Contributor',
+    condition: 'Fallback role when no category dominates.',
+    action: 'Choose a focus area (commits, PRs, issues, or repo contributions) and grow it consistently.',
+    challenge: 'Pick one lane this week and make at least 5 targeted contributions.',
+  },
+];
+
+const ROLE_NEXT_TARGET = {
+  Contributor: 'Coder',
+  Coder: 'Builder',
+  Builder: 'Architect',
+  Architect: 'Maintainer',
+  Maintainer: 'Collaborator',
+  Collaborator: 'Architect',
+};
+
+const ROLE_THEME = {
+  Builder: {
+    icon: '🛠',
+    badge: 'border-amber-300/35 bg-amber-500/15 text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.25)]',
+    badgeAnimation: 'animate-pulse',
+    card: 'border-amber-300/35 bg-amber-500/12',
+    accent: 'text-amber-100',
+  },
+  Coder: {
+    icon: '</>',
+    badge: 'border-cyan-300/35 bg-cyan-500/12 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.2)]',
+    badgeAnimation: 'animate-bounce',
+    card: 'border-cyan-300/35 bg-cyan-500/10',
+    accent: 'text-cyan-100',
+  },
+  Architect: {
+    icon: '🏗',
+    badge: 'border-violet-300/35 bg-violet-500/15 text-violet-100 shadow-[0_0_20px_rgba(167,139,250,0.25)]',
+    badgeAnimation: 'animate-pulse',
+    card: 'border-violet-300/35 bg-violet-500/12',
+    accent: 'text-violet-100',
+  },
+  Maintainer: {
+    icon: '🧭',
+    badge: 'border-emerald-300/35 bg-emerald-500/15 text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.25)]',
+    badgeAnimation: 'animate-pulse',
+    card: 'border-emerald-300/35 bg-emerald-500/12',
+    accent: 'text-emerald-100',
+  },
+  Collaborator: {
+    icon: '🤝',
+    badge: 'border-pink-300/35 bg-pink-500/15 text-pink-100 shadow-[0_0_20px_rgba(244,114,182,0.25)]',
+    badgeAnimation: 'animate-bounce',
+    card: 'border-pink-300/35 bg-pink-500/12',
+    accent: 'text-pink-100',
+  },
+  Contributor: {
+    icon: '🚀',
+    badge: 'border-slate-300/35 bg-slate-500/15 text-slate-100 shadow-[0_0_20px_rgba(148,163,184,0.2)]',
+    badgeAnimation: 'animate-pulse',
+    card: 'border-slate-300/35 bg-slate-500/10',
+    accent: 'text-slate-100',
+  },
+};
+
+function getRoleTheme(roleName) {
+  return ROLE_THEME[roleName] || ROLE_THEME.Contributor;
+}
+
+function getNextRole(roleName) {
+  return ROLE_NEXT_TARGET[roleName] || 'Coder';
+}
 
 // --- Helper Functions (Logic Preserved) ---
 
@@ -41,6 +144,14 @@ function formatTime(date) {
   const minutes = pad(date.getMinutes());
   const period = date.getHours() >= 12 ? 'PM' : 'AM';
   return `${hours}:${minutes} ${period}`;
+}
+
+function getGithubFollowersUrl(username) {
+  return `https://github.com/${username}?tab=followers`;
+}
+
+function getGithubFollowingUrl(username) {
+  return `https://github.com/${username}?tab=following`;
 }
 
 function BrandMark({ className = '' }) {
@@ -80,6 +191,43 @@ function getNotificationButtonLabel(notificationState) {
   if (notificationState === 'denied') return 'Alerts Blocked';
   if (notificationState === 'unsupported') return 'Unsupported';
   return 'Enable Alerts';
+}
+
+function getNotificationButtonClasses(notificationState, alertsEnabled) {
+  if (notificationState === 'granted' && alertsEnabled) {
+    return 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.25)]';
+  }
+
+  if (notificationState === 'granted' && !alertsEnabled) {
+    return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
+  }
+
+  if (notificationState === 'denied') {
+    return 'border-red-500/30 bg-red-500/15 text-red-200 shadow-[0_0_18px_rgba(239,68,68,0.2)]';
+  }
+
+  return 'border-white/10 bg-white/5 text-slate-300';
+}
+
+function readNotificationCache() {
+  if (typeof window === 'undefined') return { sent: {}, forkCounts: {}, totalForks: null };
+
+  try {
+    const raw = window.localStorage.getItem(NOTIFICATION_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      sent: parsed?.sent || {},
+      forkCounts: parsed?.forkCounts || {},
+      totalForks: typeof parsed?.totalForks === 'number' ? parsed.totalForks : null,
+    };
+  } catch {
+    return { sent: {}, forkCounts: {}, totalForks: null };
+  }
+}
+
+function writeNotificationCache(cache) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(cache));
 }
 
 function startOfWeek(date) {
@@ -185,11 +333,19 @@ export default function GitPulseDashboard() {
     const stored = window.localStorage.getItem(ALERTS_ENABLED_STORAGE_KEY);
     return stored === null ? true : stored === 'true';
   });
-  const [alertTriggeredForDay, setAlertTriggeredForDay] = useState(false);
+  const [activeView, setActiveView] = useState(() => (typeof window !== 'undefined' && window.location.hash === '#profile' ? 'profile' : 'dashboard'));
   const [hoveredCell, setHoveredCell] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedReposDetailed, setSelectedReposDetailed] = useState([]);
   const [selectedReposLoading, setSelectedReposLoading] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState(null);
+  const [languageRepos, setLanguageRepos] = useState([]);
+  const [showAllRepos, setShowAllRepos] = useState(false);
+  const [repoSearchInput, setRepoSearchInput] = useState('');
+  const [showRoleGuide, setShowRoleGuide] = useState(false);
+  const languageSectionRef = useRef(null);
+  const allReposSectionRef = useRef(null);
+  const selectedDateSectionRef = useRef(null);
 
   // Memoized Stats
   const progressPercent = useMemo(() => data ? Math.min(100, Math.round((data.currentStreak / DAILY_GOAL) * 100)) : 0, [data]);
@@ -221,11 +377,63 @@ export default function GitPulseDashboard() {
     return { commits, activeDays, activeRepos: activeRepos.size, consistency: monthDays.length ? Math.round((activeDays / monthDays.length) * 100) : 0 };
   }, [data, heatmapYear, nowTime]);
 
+  const allRepos = useMemo(() => {
+    if (Array.isArray(data?.allRepositories) && data.allRepositories.length > 0) {
+      return [...data.allRepositories].sort((a, b) => {
+        if ((b.isFork ? 1 : 0) !== (a.isFork ? 1 : 0)) {
+          return (a.isFork ? 1 : 0) - (b.isFork ? 1 : 0);
+        }
+        return a.nameWithOwner.localeCompare(b.nameWithOwner);
+      });
+    }
+
+    if (!data?.commitContributionsByRepository) return [];
+    const repos = data.commitContributionsByRepository.map((repoContrib) => ({
+      nameWithOwner: repoContrib.repository?.nameWithOwner || 'unknown',
+      url: repoContrib.repository?.url || '',
+      stargazerCount: repoContrib.repository?.stargazerCount || 0,
+      forkCount: repoContrib.repository?.forkCount || 0,
+      commits: repoContrib.contributions?.nodes?.length || 0,
+      isFork: false,
+      isPrivate: false,
+    }));
+    return repos.sort((a, b) => b.commits - a.commits);
+  }, [data?.allRepositories, data?.commitContributionsByRepository]);
+
+  const filteredAllRepos = useMemo(() => {
+    const normalizedQuery = repoSearchInput.trim().toLowerCase();
+    if (!normalizedQuery) return allRepos;
+    return allRepos.filter((repo) => {
+      const fullName = repo.nameWithOwner.toLowerCase();
+      const shortName = repo.nameWithOwner.split('/').pop()?.toLowerCase() || '';
+      return shortName.includes(normalizedQuery) || fullName.includes(normalizedQuery);
+    });
+  }, [allRepos, repoSearchInput]);
+
+  const allReposCount = data?.allRepositoriesCount ?? allRepos.length;
+  const currentRoleTheme = getRoleTheme(data?.activityRole || 'Contributor');
+  const currentRoleName = data?.activityRole || 'Contributor';
+  const nextRoleName = getNextRole(currentRoleName);
+  const nextRole = ROLE_GUIDE.find((role) => role.name === nextRoleName);
+  const nextRoleTheme = getRoleTheme(nextRoleName);
+
   const viewerName = data?.username || firebaseUser?.displayName || 'github-user';
   const profileName = data?.displayName || data?.username || firebaseUser?.displayName || restoredAccount || 'GitHub User';
   const profileAvatar = data?.avatarUrl || firebaseUser?.photoURL || restoredAvatar;
+  const isGitHubPro = Boolean(data?.isGitHubPro);
   const isEvening = nowTime.getHours() >= 20;
   const canUseAccount = Boolean(firebaseUser && authToken);
+
+  useEffect(() => {
+    const syncViewFromHash = () => {
+      setActiveView(window.location.hash === '#profile' ? 'profile' : 'dashboard');
+    };
+
+    syncViewFromHash();
+    window.addEventListener('hashchange', syncViewFromHash);
+
+    return () => window.removeEventListener('hashchange', syncViewFromHash);
+  }, []);
 
   // --- Effects (Logic Preserved) ---
 
@@ -240,6 +448,8 @@ export default function GitPulseDashboard() {
     return onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       if (!user) { setAuthToken(''); setAuthStep('idle'); return; }
+      const isExplicitLogout = window.localStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
+      if (isExplicitLogout) { setAuthToken(''); setAuthStep('idle'); return; }
       const storedToken = sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
       if (storedToken) { setAuthToken(storedToken); setAuthStep('signed-in'); }
     });
@@ -284,6 +494,133 @@ export default function GitPulseDashboard() {
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
     };
   }, [canUseAccount, refresh]);
+
+  useEffect(() => {
+    if (selectedLanguage && languageSectionRef.current) {
+      languageSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedLanguage]);
+
+  useEffect(() => {
+    if (showAllRepos && allReposSectionRef.current) {
+      allReposSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [showAllRepos]);
+
+  useEffect(() => {
+    if (!showAllRepos) {
+      setRepoSearchInput('');
+    }
+  }, [showAllRepos]);
+
+  useEffect(() => {
+    if (selectedDate && selectedDateSectionRef.current) {
+      selectedDateSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (!showRoleGuide) return;
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowRoleGuide(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showRoleGuide]);
+
+  useEffect(() => {
+    if (!canUseAccount || !data || !alertsEnabled || notificationState !== 'granted' || typeof Notification === 'undefined') {
+      return;
+    }
+
+    const now = new Date();
+    const todayKey = toDateKey(now);
+    const yesterdayDate = new Date(now);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayKey = toDateKey(yesterdayDate);
+    const username = data?.username || viewerName;
+    const yesterdayCommits = data?.contributionDays?.find((day) => day.date === yesterdayKey)?.contributionCount || 0;
+    const currentStreak = data?.currentStreak || 0;
+
+    const cache = readNotificationCache();
+    let hasCacheUpdates = false;
+
+    const notifyOnce = (eventKey, title, body) => {
+      if (cache.sent[eventKey]) return;
+      new Notification(title, { body });
+      cache.sent[eventKey] = now.toISOString();
+      hasCacheUpdates = true;
+    };
+
+    // 1) Streak at Risk (Evening)
+    if (now.getHours() >= 20 && !data?.hasContributedToday) {
+      notifyOnce(
+        `streak-risk-${todayKey}`,
+        '⚠️ Streak at Risk!',
+        `You haven't committed today, @${username}. Push a change now to protect your ${currentStreak} day streak!`,
+      );
+    }
+
+    // 2) Streak Failed (Morning-After)
+    if (now.getHours() >= 0 && now.getHours() < 12 && currentStreak === 0 && yesterdayCommits === 0) {
+      notifyOnce(
+        `streak-failed-${todayKey}`,
+        '❌ Streak Lost',
+        'Yesterday ended without activity. Your streak has been reset to 0. Time to start a new one!',
+      );
+    }
+
+    // 3) Repository Forked (Social Impact)
+    const currentForkCounts = Object.fromEntries(
+      (data?.allRepositories || []).map((repo) => [repo.nameWithOwner, repo.forkCount || 0]),
+    );
+    const currentTotalForks = Object.values(currentForkCounts).reduce((total, count) => total + count, 0);
+    const previousTotalForks = cache.totalForks;
+
+    if (previousTotalForks !== null && currentTotalForks > previousTotalForks) {
+      const increasedRepo = (data?.allRepositories || []).find(
+        (repo) => (repo.forkCount || 0) > (cache.forkCounts?.[repo.nameWithOwner] || 0),
+      );
+
+      if (increasedRepo) {
+        notifyOnce(
+          `fork-increase-${increasedRepo.nameWithOwner}-${increasedRepo.forkCount}`,
+          '🍴 New Fork Detected',
+          `Your repository ${increasedRepo.nameWithOwner} was just forked. Your project's reach is growing!`,
+        );
+      }
+    }
+
+    // 4) New Milestone
+    if (currentStreak > 0 && currentStreak % 10 === 0) {
+      notifyOnce(
+        `milestone-${currentStreak}`,
+        '🏆 New Milestone Achieved!',
+        `Incredible momentum! You've officially reached a ${currentStreak} day contribution streak.`,
+      );
+    }
+
+    // 5) Goal Completion (30-day target)
+    if (currentStreak === 30) {
+      notifyOnce(
+        'goal-30',
+        '⭐ 30-Day Goal Met!',
+        "Congratulations! You've completed your 30-day consistency challenge. Badge unlocked.",
+      );
+    }
+
+    cache.forkCounts = currentForkCounts;
+    cache.totalForks = currentTotalForks;
+    hasCacheUpdates = true;
+
+    if (hasCacheUpdates) {
+      writeNotificationCache(cache);
+    }
+  }, [alertsEnabled, canUseAccount, data, notificationState, viewerName]);
 
   useEffect(() => {
     if (!selectedDate || !canUseAccount || !data?.username || !authToken) {
@@ -361,6 +698,34 @@ export default function GitPulseDashboard() {
 
   // --- Handlers ---
 
+  const handleLanguageSelect = (languageName) => {
+    setSelectedLanguage(languageName);
+    
+    // Filter repos that use this language
+    const reposWithLanguage = new Map();
+    const commitContributions = data?.commitContributionsByRepository || [];
+    
+    for (const repoContribution of commitContributions) {
+      const repository = repoContribution?.repository;
+      const repoLanguageEdges = repository?.languages?.edges || [];
+      
+      const hasLanguage = repoLanguageEdges.some(
+        (lang) => lang?.node?.name === languageName && (lang?.size || 0) > 0
+      );
+      
+      if (hasLanguage) {
+        reposWithLanguage.set(repository.nameWithOwner, {
+          nameWithOwner: repository.nameWithOwner,
+          url: repository.url,
+          stargazerCount: repository.stargazerCount || 0,
+          forkCount: repository.forkCount || 0,
+        });
+      }
+    }
+    
+    setLanguageRepos(Array.from(reposWithLanguage.values()));
+  };
+
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthStep('starting');
@@ -369,6 +734,8 @@ export default function GitPulseDashboard() {
       const result = await signInWithPopup(auth, createGithubProvider());
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = sanitizeCredential(credential?.accessToken || '');
+      window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      window.localStorage.setItem(AUTH_STORAGE_KEY, token);
       setAuthToken(token);
       setFirebaseUser(result.user);
       setAuthStep('signed-in');
@@ -377,10 +744,21 @@ export default function GitPulseDashboard() {
 
   const handleSignOut = async () => {
     try { await signOut(getFirebaseAuth()); } catch (e) {}
+    window.localStorage.setItem(EXPLICIT_LOGOUT_KEY, 'true');
     setFirebaseUser(null); setAuthToken(''); setAuthStep('idle');
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
     window.localStorage.removeItem(ACCOUNT_AVATAR_STORAGE_KEY);
+  };
+
+  const handleOpenProfilePage = () => {
+    window.location.hash = '#profile';
+  };
+
+  const handleBackFromProfilePage = () => {
+    if (window.location.hash === '#profile') {
+      window.location.hash = '';
+    }
   };
 
   const handleEnableNotifications = async () => {
@@ -427,7 +805,7 @@ export default function GitPulseDashboard() {
                 disabled={authStep === 'starting'}
                 className="w-full py-4 rounded-2xl bg-white text-slate-950 font-bold flex items-center justify-center gap-3 hover:bg-emerald-50 transition-all active:scale-[0.98]"
               >
-                <ShieldCheck className="h-5 w-5" />
+                <Github className="h-5 w-5" />
                 {authStep === 'starting' ? 'Connecting...' : 'Connect GitHub'}
               </button>
             </section>
@@ -437,16 +815,34 @@ export default function GitPulseDashboard() {
     );
   }
 
+  if (activeView === 'profile') {
+    return (
+      <ProfilePage
+        data={data}
+        profileAvatar={profileAvatar}
+        profileName={profileName}
+        isGitHubPro={isGitHubPro}
+        viewerName={viewerName}
+        onBack={handleBackFromProfilePage}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#020617] text-slate-200">
       <nav className="border-b border-white/5 bg-[#020617]/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <SiteBrand sizeClassName="h-8 w-8" textClassName="text-base" />
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full">
-              <img src={profileAvatar} className="h-5 w-5 rounded-full" alt="" />
-              <span className="text-xs font-medium text-slate-300">{profileName}</span>
-            </div>
+            <button onClick={handleOpenProfilePage} className={`md:hidden h-10 w-10 rounded-full overflow-hidden ring-2 bg-white/5 ${isGitHubPro ? 'ring-violet-400/60 shadow-[0_0_18px_rgba(168,85,247,0.22)]' : 'ring-emerald-500/30'}`}>
+              <img src={profileAvatar} className="h-full w-full object-cover" alt="" />
+            </button>
+            <button onClick={handleOpenProfilePage} className={`hidden md:flex items-center gap-3 px-4 py-2 rounded-full border transition-colors text-left ${isGitHubPro ? 'bg-gradient-to-r from-violet-500/15 via-fuchsia-500/10 to-amber-500/10 border-violet-400/30 shadow-[0_0_22px_rgba(168,85,247,0.18)]' : 'bg-white/5 border-white/10 shadow-[0_0_18px_rgba(16,185,129,0.08)] hover:bg-white/10'}`}>
+              <img src={profileAvatar} className={`h-8 w-8 rounded-full ring-2 ${isGitHubPro ? 'ring-violet-400/40' : 'ring-emerald-500/30'}`} alt="" />
+              <span className={`text-sm font-semibold ${isGitHubPro ? 'text-violet-100' : 'text-slate-200'}`}>{profileName}</span>
+              {isGitHubPro && <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.25em] text-violet-200">Pro</span>}
+            </button>
             <button onClick={handleSignOut} className="p-2 hover:bg-white/5 rounded-full text-slate-400"><LogOut className="h-5 w-5" /></button>
           </div>
         </div>
@@ -456,15 +852,31 @@ export default function GitPulseDashboard() {
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <h1 className="text-4xl font-extrabold text-white tracking-tight">Dashboard</h1>
-            <p className="text-slate-400 mt-1">Real-time stats for <span className="text-emerald-400">@{viewerName}</span></p>
+            <p className="text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+              <span>
+                Real-time stats for <span className="text-emerald-400">@{viewerName}</span>
+              </span>
+              {data?.activityRole && (
+                <button
+                  onClick={() => setShowRoleGuide(true)}
+                  className={`px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:scale-105 ${currentRoleTheme.badge} ${currentRoleTheme.badgeAnimation}`}
+                >
+                  {currentRoleTheme.icon} Role: {data.activityRole}
+                </button>
+              )}
+            </p>
           </div>
           <div className="flex flex-col items-start gap-2 sm:items-end">
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={() => refresh()} disabled={loading} className="px-4 py-2 rounded-xl text-xs font-bold border border-white/10 bg-white/5 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">
                 <RefreshCw className={`h-3.5 w-3.5 inline mr-2 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Refreshing...' : 'Refresh'}
               </button>
-              <button onClick={handleEnableNotifications} className="px-4 py-2 rounded-xl text-xs font-bold border border-white/10 bg-white/5 text-slate-300">
-                <BellRing className="h-3.5 w-3.5 inline mr-2" /> {notificationState === 'granted' ? (alertsEnabled ? 'Alerts On' : 'Alerts Off') : getNotificationButtonLabel(notificationState)}
+              <button
+                onClick={handleEnableNotifications}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all duration-200 ${getNotificationButtonClasses(notificationState, alertsEnabled)}`}
+              >
+                <BellRing className={`h-3.5 w-3.5 inline mr-2 ${notificationState === 'granted' && alertsEnabled ? 'text-emerald-200' : notificationState === 'denied' ? 'text-red-200' : 'text-current'}`} />
+                {notificationState === 'granted' ? (alertsEnabled ? 'Alerts On' : 'Alerts Off') : getNotificationButtonLabel(notificationState)}
               </button>
             </div>
             <div className="px-4 py-2 rounded-xl bg-slate-900 border border-white/5 text-xs text-slate-400 flex items-center gap-2 self-start sm:self-auto">
@@ -473,7 +885,7 @@ export default function GitPulseDashboard() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-8 transition-all">
             <p className="text-sm font-medium text-slate-400 flex items-center gap-2 mb-4"><Flame className="text-orange-400" /> Current Streak</p>
             <div className="flex items-baseline gap-2">
@@ -503,7 +915,7 @@ export default function GitPulseDashboard() {
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-8">
-            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><Activity className="text-yellow-400" /> Consistency</p>
+            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><Activity className="text-yellow-400" /> Activity Mix</p>
             <div className="text-5xl font-bold text-white mb-4">{monthlySnapshot.consistency}%</div>
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
                 <div><p className="text-[10px] uppercase text-slate-500 font-bold">Commits</p><p className="text-lg font-semibold">{monthlySnapshot.commits}</p></div>
@@ -511,6 +923,25 @@ export default function GitPulseDashboard() {
             </div>
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: Monthly snapshot + derived stats</p>
           </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-8">
+            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><GitBranch className="text-blue-400" /> Total Pull Requests</p>
+            <div className="text-5xl font-bold text-white mb-4">{data?.totalPullRequestContributions ?? 0}</div>
+            <div className="grid grid-cols-1 gap-4 pt-4 border-t border-white/5">
+                <div><p className="text-[10px] uppercase text-slate-500 font-bold">Issues</p><p className="text-lg font-semibold">{data?.totalIssueContributions ?? 0}</p></div>
+            </div>
+            <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: GitHub contribution stats</p>
+          </div>
+
+          <button
+            onClick={() => setShowAllRepos(true)}
+            className="rounded-3xl border border-white/10 bg-white/[0.02] p-8 hover:bg-white/[0.04] transition-all cursor-pointer"
+          >
+            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><Github className="text-purple-400" /> All Repositories</p>
+            <div className="text-5xl font-bold text-white mb-4">{allReposCount}</div>
+            <p className="text-xs text-slate-400">Click to view all repositories</p>
+            <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: GitHub repositories</p>
+          </button>
         </div>
 
         <section className="bg-white/[0.01] border border-white/10 rounded-[2rem] p-8">
@@ -604,8 +1035,217 @@ export default function GitPulseDashboard() {
           </div>
         </section>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500 mb-4">Workday</p>
+            {data?.contributionWindow ? (
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">First Contribution</p>
+                  <p className="mt-2 text-sm font-semibold text-white">Earliest: {data.contributionWindow.first}</p>
+                </div>
+                <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Last Contribution</p>
+                  <p className="mt-2 text-sm font-semibold text-white">Latest: {data.contributionWindow.last}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No contribution timestamps available.</p>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500 mb-4">Tech Profile</p>
+            {data?.languageBreakdown && data.languageBreakdown.length > 0 ? (
+              <>
+                <div className="mb-3 flex h-3 w-full overflow-hidden rounded-full bg-slate-800">
+                  {data.languageBreakdown.map((language) => (
+                    <div
+                      key={language.name}
+                      className="h-full"
+                      style={{ width: `${Math.max(4, language.percentage)}%`, backgroundColor: language.color }}
+                      title={`${language.name} ${language.percentage}%`}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+                  {data.languageBreakdown.map((language) => (
+                    <button
+                      key={language.name}
+                      onClick={() => handleLanguageSelect(language.name)}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
+                        selectedLanguage === language.name
+                          ? 'bg-white/15 border border-white/20'
+                          : 'hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: language.color }} />
+                      <span className="text-slate-300 cursor-pointer">
+                        {language.name} ({language.percentage}%)
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">No language data available.</p>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500 mb-4">Total Impact</p>
+            {data?.totalImpact ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Stars</p>
+                    <p className="mt-1 text-lg font-black text-white">{data.totalImpact.totalStars ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Forks</p>
+                    <p className="mt-1 text-lg font-black text-white">{data.totalImpact.totalForks ?? 0}</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-400">
+                  {data.totalImpact.totalStars ?? 0} stars, {data.totalImpact.totalForks ?? 0} forks
+                </p>
+                {data.totalImpact.topRepositories && data.totalImpact.topRepositories.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.totalImpact.topRepositories.slice(0, 2).map((repo) => (
+                      <span key={repo.nameWithOwner} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-300">
+                        {repo.nameWithOwner} · {repo.stars}★
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No impact data available.</p>
+            )}
+          </div>
+        </div>
+
+        {selectedLanguage && (
+          <section ref={languageSectionRef} className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-white text-lg flex items-center gap-2"><ChevronRight className="text-emerald-500" /> Repositories using {selectedLanguage}</h3>
+                <button onClick={() => setSelectedLanguage(null)} className="text-xs text-slate-500 hover:text-white">Close</button>
+              </div>
+              <div className="mb-5 rounded-2xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-300/80">Total repositories</p>
+                <p className="mt-1 text-2xl font-black text-white">{languageRepos.length}</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {languageRepos.map((repo) => (
+                  <a
+                    key={repo.nameWithOwner}
+                    href={repo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-emerald-500/30 transition-all group"
+                  >
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Repo</p>
+                    <p className="text-sm font-bold text-white group-hover:text-emerald-400 truncate">{repo.nameWithOwner}</p>
+                    <div className="mt-3 flex gap-3 text-xs">
+                      <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/10">
+                        ⭐ {repo.stargazerCount}
+                      </span>
+                      <span className="bg-slate-500/10 text-slate-400 px-2 py-0.5 rounded border border-slate-500/10">
+                        🍴 {repo.forkCount}
+                      </span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {showAllRepos && (
+          <section ref={allReposSectionRef} className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-white text-lg flex items-center gap-2"><ChevronRight className="text-emerald-500" /> All Repositories</h3>
+                <button onClick={() => setShowAllRepos(false)} className="text-xs text-slate-500 hover:text-white">Close</button>
+              </div>
+              <div className="mb-5 rounded-2xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-300/80">Total repositories</p>
+                <p className="mt-1 text-2xl font-black text-white">{allReposCount}</p>
+                <p className="mt-1 text-xs text-slate-400">Showing {filteredAllRepos.length}{repoSearchInput.trim() ? ` matching "${repoSearchInput.trim()}"` : ''}</p>
+              </div>
+              <form className="mb-4 flex gap-2" onSubmit={(event) => event.preventDefault()}>
+                <input
+                  type="text"
+                  value={repoSearchInput}
+                  onChange={(event) => setRepoSearchInput(event.target.value)}
+                  placeholder="Search repository name..."
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-400/40 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRepoSearchInput('')}
+                  disabled={!repoSearchInput}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  Search
+                </button>
+              </form>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredAllRepos.map((repo) => (
+                  <a
+                    key={repo.nameWithOwner}
+                    href={repo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-emerald-500/30 transition-all group"
+                  >
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Repo</p>
+                    <p className="text-sm font-bold text-white group-hover:text-emerald-400 truncate">{repo.nameWithOwner}</p>
+                    <div className="mt-3 flex gap-2 flex-wrap text-xs">
+                      <span className="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/10">
+                        ⭐ {repo.stargazerCount}
+                      </span>
+                      <span className="bg-slate-500/10 text-slate-400 px-2 py-0.5 rounded border border-slate-500/10">
+                        🍴 {repo.forkCount}
+                      </span>
+                      {typeof repo.commits === 'number' && (
+                        <span className="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/10">
+                          💾 {repo.commits}
+                        </span>
+                      )}
+                      {repo.isFork && (
+                        <span className="bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded border border-amber-500/10">
+                          Fork
+                        </span>
+                      )}
+                      {repo.isPrivate && (
+                        <span className="bg-violet-500/10 text-violet-300 px-2 py-0.5 rounded border border-violet-500/10">
+                          Private
+                        </span>
+                      )}
+                    </div>
+                  </a>
+                ))}
+                {filteredAllRepos.length === 0 && (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400 md:col-span-2 lg:col-span-3">
+                    No repositories found for "{repoSearchInput.trim()}".
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         {selectedDate && (
-          <section className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <section ref={selectedDateSectionRef} className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-8">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-white text-lg flex items-center gap-2"><ChevronRight className="text-emerald-500" /> {formatDateLabel(selectedDate)}</h3>
@@ -630,6 +1270,87 @@ export default function GitPulseDashboard() {
             </div>
           </section>
         )}
+
+        {showRoleGuide && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setShowRoleGuide(false)}
+          >
+            <div
+              className="w-full max-w-6xl rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1220] via-[#101a30] to-[#0a0f1d] p-4 md:p-5 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg md:text-xl font-black text-white">Role Guide</h3>
+                  <p className="mt-0.5 text-xs md:text-sm text-slate-400">
+                    Active role: <span className={`font-bold ${currentRoleTheme.accent}`}>{currentRoleName}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowRoleGuide(false)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className={`mb-3 rounded-2xl border p-3 ${currentRoleTheme.card}`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${currentRoleTheme.accent}`}>
+                      {currentRoleTheme.icon} Active Role
+                    </p>
+                    <p className="mt-1 text-sm md:text-base font-black text-white">You are in the {currentRoleName} lane.</p>
+                    <p className="mt-0.5 text-xs md:text-sm text-slate-200/85">This role is selected from your current contribution mix and challenge path.</p>
+                  </div>
+                  {nextRole && (
+                    <div className={`rounded-xl border px-3 py-1.5 ${nextRoleTheme.card}`}>
+                      <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${nextRoleTheme.accent}`}>Next Target</p>
+                      <p className={`mt-1 text-sm font-black ${nextRoleTheme.accent}`}>{nextRoleTheme.icon} {nextRole.name}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                {ROLE_GUIDE.map((role) => {
+                  const roleTheme = getRoleTheme(role.name);
+                  const isCurrentRole = data?.activityRole === role.name;
+
+                  return (
+                    <div
+                      key={role.name}
+                      className={`rounded-xl border p-2.5 transition-all ${roleTheme.card} ${isCurrentRole ? `${roleTheme.badgeAnimation} scale-[1.01] shadow-[0_0_20px_rgba(255,255,255,0.08)]` : 'opacity-90 hover:opacity-100 hover:-translate-y-0.5'}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-[11px] font-black uppercase tracking-[0.14em] ${roleTheme.accent}`}>
+                          {roleTheme.icon} {role.name}
+                        </p>
+                        {isCurrentRole && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] ${roleTheme.badge}`}>
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className={`mt-1 text-[11px] leading-relaxed ${roleTheme.accent} opacity-90`}>
+                        <span className="font-bold">Rule:</span> {role.condition}
+                      </p>
+                      <p className={`mt-1 text-[11px] leading-relaxed ${roleTheme.accent}`}>
+                        <span className="font-bold">Do:</span> {role.action}
+                      </p>
+                      <div className="mt-1.5 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5">
+                        <p className={`text-[9px] font-black uppercase tracking-[0.14em] ${roleTheme.accent}`}>Challenge</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-200">{role.challenge}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </main>
   );

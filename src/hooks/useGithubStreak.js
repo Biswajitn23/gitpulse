@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchGithubStreak } from '../lib/githubStreak';
 
-export function useGithubStreak(username, token = import.meta.env.VITE_GITHUB_TOKEN) {
+export function useGithubStreak(username, token = '') {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(Boolean(token));
   const [error, setError] = useState(null);
@@ -21,7 +20,21 @@ export function useGithubStreak(username, token = import.meta.env.VITE_GITHUB_TO
       setError(null);
 
       try {
-        const result = await fetchGithubStreak(username, token);
+        const response = await fetch('/api/github-streak', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username, token }),
+        });
+
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Unable to load streak data.');
+        }
+
+        const result = payload?.data || null;
         if (requestId === requestIdRef.current) {
           setData(result);
         }
