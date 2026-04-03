@@ -26,10 +26,7 @@ async function readJsonBody(request) {
   return rawBody ? JSON.parse(rawBody) : {};
 }
 
-const vite = await createViteServer({
-  server: { middlewareMode: true },
-  appType: 'custom',
-});
+let vite;
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -50,6 +47,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (!vite) {
+      sendJson(response, 503, { error: 'Dev server is starting. Please retry in a moment.' });
+      return;
+    }
+
     vite.middlewares(request, response, (error) => {
       if (error) {
         throw error;
@@ -62,6 +64,51 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`GitPulse API + Vite server running at http://localhost:${PORT}`);
+vite = await createViteServer({
+  server: {
+    middlewareMode: true,
+    hmr: {
+      server,
+    },
+  },
+  appType: 'custom',
 });
+
+function listenWithFallback(port, attemptsLeft = 10) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      if (error?.code === 'EADDRINUSE' && attemptsLeft > 0) {
+        console.warn(`Port ${port} is busy, trying ${port + 1}...`);
+        resolve(listenWithFallback(port + 1, attemptsLeft - 1));
+        return;
+      }
+
+      reject(error);
+    };
+
+    server.once('error', onError);
+    server.listen(port, () => {
+      server.off('error', onError);
+      resolve(port);
+    });
+  });
+}
+
+function printAsciiBanner() {
+  console.log(String.raw`
+  ____ _ _   ____       _
+ / ___(_) |_|  _ \ _   _| |___  ___
+| |  _| | __| |_) | | | | / __|/ _ \
+| |_| | | |_|  __/| |_| | \__ \  __/
+ \____|_|\__|_|    \__,_|_|___/\___|
+`);
+}
+
+try {
+  printAsciiBanner();
+  const activePort = await listenWithFallback(PORT);
+  console.log(`GitPulse API + Vite server running at http://localhost:${activePort}`);
+} catch (error) {
+  console.error(error);
+  process.exit(1);
+}
