@@ -791,19 +791,19 @@ export default function GitPulseDashboard() {
 
   if (!canUseAccount) {
     return (
-      <main className="min-h-screen bg-[#020617] text-slate-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
+      <main className="min-h-screen bg-[#020617] text-slate-100 flex items-center justify-center px-3 py-4 sm:p-4">
+        <div className="w-full max-w-sm sm:max-w-md">
           <div className="relative group">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
-            <section className="relative bg-[#0f172a]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl text-center">
-              <div className="mb-6">
-                <SiteBrand sizeClassName="h-20 w-20" textClassName="text-3xl" stacked />
+            <section className="relative bg-[#0f172a]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-5 sm:p-8 shadow-2xl text-center">
+              <div className="mb-5 sm:mb-6">
+                <SiteBrand sizeClassName="h-16 w-16 sm:h-20 sm:w-20" textClassName="text-2xl sm:text-3xl" stacked />
               </div>
-              <p className="text-slate-400 text-sm mb-8">Sign in with GitHub to track your contribution streak.</p>
+              <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-400 sm:mb-8">Sign in with GitHub to track your contribution streak.</p>
               <button
                 onClick={handleAuthSubmit}
                 disabled={authStep === 'starting'}
-                className="w-full py-4 rounded-2xl bg-white text-slate-950 font-bold flex items-center justify-center gap-3 hover:bg-emerald-50 transition-all active:scale-[0.98]"
+                className="mt-6 w-full rounded-2xl bg-white px-4 py-4 font-bold text-slate-950 transition-all active:scale-[0.98] flex items-center justify-center gap-3 hover:bg-emerald-50"
               >
                 <Github className="h-5 w-5" />
                 {authStep === 'starting' ? 'Connecting...' : 'Connect GitHub'}
@@ -832,9 +832,9 @@ export default function GitPulseDashboard() {
   return (
     <main className="min-h-screen bg-[#020617] text-slate-200">
       <nav className="border-b border-white/5 bg-[#020617]/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <SiteBrand sizeClassName="h-8 w-8" textClassName="text-base" />
-          <div className="flex items-center gap-4">
+        <div className="mx-auto flex h-auto max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:px-4 sm:h-16">
+          <SiteBrand sizeClassName="h-8 w-8" textClassName="text-sm sm:text-base" />
+          <div className="flex items-center gap-2 sm:gap-4">
             <button onClick={handleOpenProfilePage} className={`md:hidden h-10 w-10 rounded-full overflow-hidden ring-2 bg-white/5 ${isGitHubPro ? 'ring-violet-400/60 shadow-[0_0_18px_rgba(168,85,247,0.22)]' : 'ring-emerald-500/30'}`}>
               <img src={profileAvatar} className="h-full w-full object-cover" alt="" />
             </button>
@@ -848,11 +848,11 @@ export default function GitPulseDashboard() {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8">
+        <header className="mb-6 flex flex-col gap-5 md:mb-10 md:flex-row md:items-end md:justify-between md:gap-6">
           <div>
-            <h1 className="text-4xl font-extrabold text-white tracking-tight">Dashboard</h1>
-            <p className="text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Dashboard</h1>
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-400 sm:text-base">
               <span>
                 Real-time stats for <span className="text-emerald-400">@{viewerName}</span>
               </span>
@@ -866,33 +866,33 @@ export default function GitPulseDashboard() {
               )}
             </p>
           </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={() => refresh()} disabled={loading} className="px-4 py-2 rounded-xl text-xs font-bold border border-white/10 bg-white/5 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              <button onClick={() => refresh()} disabled={loading} className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 disabled:cursor-not-allowed disabled:opacity-50">
                 <RefreshCw className={`h-3.5 w-3.5 inline mr-2 ${loading ? 'animate-spin' : ''}`} /> {loading ? 'Refreshing...' : 'Refresh'}
               </button>
               <button
                 onClick={handleEnableNotifications}
-                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all duration-200 ${getNotificationButtonClasses(notificationState, alertsEnabled)}`}
+                className={`inline-flex items-center justify-center rounded-xl border px-4 py-2 text-xs font-bold transition-all duration-200 ${getNotificationButtonClasses(notificationState, alertsEnabled)}`}
               >
                 <BellRing className={`h-3.5 w-3.5 inline mr-2 ${notificationState === 'granted' && alertsEnabled ? 'text-emerald-200' : notificationState === 'denied' ? 'text-red-200' : 'text-current'}`} />
                 {notificationState === 'granted' ? (alertsEnabled ? 'Alerts On' : 'Alerts Off') : getNotificationButtonLabel(notificationState)}
               </button>
             </div>
-            <div className="px-4 py-2 rounded-xl bg-slate-900 border border-white/5 text-xs text-slate-400 flex items-center gap-2 self-start sm:self-auto">
+            <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-white/5 bg-slate-900 px-4 py-2 text-xs text-slate-400 self-start sm:self-auto">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> {formatTime(nowTime)}
             </div>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-8 transition-all">
-            <p className="text-sm font-medium text-slate-400 flex items-center gap-2 mb-4"><Flame className="text-orange-400" /> Current Streak</p>
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 sm:gap-6">
+          <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-5 transition-all sm:p-8">
+            <p className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-400"><Flame className="text-orange-400" /> Current Streak</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-7xl font-black text-white leading-none">{data?.currentStreak ?? 0}</span>
-              <span className="text-xl text-slate-500 font-bold">DAYS</span>
+              <span className="text-5xl font-black leading-none text-white sm:text-7xl">{data?.currentStreak ?? 0}</span>
+              <span className="text-lg font-bold text-slate-500 sm:text-xl">DAYS</span>
             </div>
-            <div className="mt-6">
+            <div className="mt-5 sm:mt-6">
               {data?.hasContributedToday ? (
                 <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">SAFE TODAY</span>
               ) : (
@@ -902,11 +902,11 @@ export default function GitPulseDashboard() {
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: GitHub contribution calendar</p>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-8">
-            <p className="text-sm font-medium text-slate-400 mb-6 flex items-center gap-2"><TrendingUp className="text-emerald-400" /> Progress this month in {currentMonthLabel}</p>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 sm:p-8">
+            <p className="mb-5 flex items-center gap-2 text-sm font-medium text-slate-400 sm:mb-6"><TrendingUp className="text-emerald-400" /> Progress this month in {currentMonthLabel}</p>
             <div className="flex justify-between items-end mb-2">
-              <span className="text-4xl font-bold text-white">{Math.min(100, Math.round((monthlySnapshot.activeDays / 30) * 100))}%</span>
-              <span className="text-xs text-slate-500 font-medium">{monthlySnapshot.activeDays}/30 active days</span>
+              <span className="text-3xl font-bold text-white sm:text-4xl">{Math.min(100, Math.round((monthlySnapshot.activeDays / 30) * 100))}%</span>
+              <span className="text-xs font-medium text-slate-500 text-right">{monthlySnapshot.activeDays}/30 active days</span>
             </div>
             <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
               <div className="h-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all duration-1000" style={{ width: `${Math.min(100, Math.round((monthlySnapshot.activeDays / 30) * 100))}%` }} />
@@ -914,9 +914,9 @@ export default function GitPulseDashboard() {
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: Derived from {currentMonthLabel} contribution activity</p>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-8">
-            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><Activity className="text-yellow-400" /> Activity Mix</p>
-            <div className="text-5xl font-bold text-white mb-4">{monthlySnapshot.consistency}%</div>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 sm:p-8">
+            <p className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-400"><Activity className="text-yellow-400" /> Activity Mix</p>
+            <div className="mb-4 text-4xl font-bold text-white sm:text-5xl">{monthlySnapshot.consistency}%</div>
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
                 <div><p className="text-[10px] uppercase text-slate-500 font-bold">Commits</p><p className="text-lg font-semibold">{monthlySnapshot.commits}</p></div>
                 <div><p className="text-[10px] uppercase text-slate-500 font-bold">Best Streak</p><p className="text-lg font-semibold">{data?.longestStreak ?? 0}</p></div>
@@ -924,9 +924,9 @@ export default function GitPulseDashboard() {
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: Monthly snapshot + derived stats</p>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-8">
-            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><GitBranch className="text-blue-400" /> Total Pull Requests</p>
-            <div className="text-5xl font-bold text-white mb-4">{data?.totalPullRequestContributions ?? 0}</div>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 sm:p-8">
+            <p className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-400"><GitBranch className="text-blue-400" /> Total Pull Requests</p>
+            <div className="mb-4 text-4xl font-bold text-white sm:text-5xl">{data?.totalPullRequestContributions ?? 0}</div>
             <div className="grid grid-cols-1 gap-4 pt-4 border-t border-white/5">
                 <div><p className="text-[10px] uppercase text-slate-500 font-bold">Issues</p><p className="text-lg font-semibold">{data?.totalIssueContributions ?? 0}</p></div>
             </div>
@@ -935,28 +935,28 @@ export default function GitPulseDashboard() {
 
           <button
             onClick={() => setShowAllRepos(true)}
-            className="rounded-3xl border border-white/10 bg-white/[0.02] p-8 hover:bg-white/[0.04] transition-all cursor-pointer"
+            className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 text-left transition-all cursor-pointer hover:bg-white/[0.04] sm:p-8"
           >
-            <p className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2"><Github className="text-purple-400" /> All Repositories</p>
-            <div className="text-5xl font-bold text-white mb-4">{allReposCount}</div>
+            <p className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-400"><Github className="text-purple-400" /> All Repositories</p>
+            <div className="mb-4 text-4xl font-bold text-white sm:text-5xl">{allReposCount}</div>
             <p className="text-xs text-slate-400">Click to view all repositories</p>
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: GitHub repositories</p>
           </button>
         </div>
 
-        <section className="bg-white/[0.01] border border-white/10 rounded-[2rem] p-8">
-          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <section className="bg-white/[0.01] border border-white/10 rounded-[2rem] p-4 sm:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-emerald-500/10 rounded-lg"><GitBranch className="h-5 w-5 text-emerald-400" /></div>
-              <h2 className="text-xl font-bold text-white">Heatmap {heatmapYear}</h2>
+              <h2 className="text-lg font-bold text-white sm:text-xl">Heatmap {heatmapYear}</h2>
             </div>
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400 sm:text-base">
               <span className="font-semibold text-white">{yearContributionTotal}</span> contributions in {heatmapYear}
             </p>
-            <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500 text-right">Source: GitHub yearly contribution calendar</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-slate-500 text-left sm:text-right">Source: GitHub yearly contribution calendar</p>
           </div>
 
-          <div className="mb-6 flex flex-wrap items-center gap-6 bg-white/[0.03] p-4 rounded-2xl border border-white/5">
+          <div className="mb-6 flex flex-wrap items-center gap-3 bg-white/[0.03] p-3 sm:gap-6 sm:p-4 rounded-2xl border border-white/5">
             <div className="flex items-center gap-2">
               <div className="h-3 w-3 rounded-sm bg-red-500/20 border border-red-500/40" />
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Missed</span>
@@ -965,7 +965,7 @@ export default function GitPulseDashboard() {
               <div className="h-3 w-3 rounded-sm bg-yellow-500/10 border border-yellow-500/20" />
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Planned</span>
             </div>
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
               <span className="text-[10px] text-slate-500 font-bold uppercase mr-2">Intensity:</span>
               <div className="h-3 w-3 rounded-sm bg-emerald-950" />
               <div className="h-3 w-3 rounded-sm bg-emerald-800" />
@@ -975,7 +975,7 @@ export default function GitPulseDashboard() {
             </div>
           </div>
 
-          <div className="overflow-x-auto pb-4 custom-scrollbar">
+          <div className="overflow-x-auto pb-4 custom-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
             <div className="grid grid-flow-col grid-rows-7 gap-1.5 min-w-max">
               {heatmapCells.map((cell) => {
                 if (cell.isPadding) return <div key={cell.key} className="h-3.5 w-3.5 opacity-0" />;
@@ -1015,17 +1015,17 @@ export default function GitPulseDashboard() {
             </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-6 bg-black/20 rounded-2xl border border-white/5">
-                <p className="text-xs font-bold text-slate-500 uppercase mb-4">Daily Insights</p>
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 sm:gap-6">
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-4 sm:p-6">
+                <p className="mb-4 text-xs font-bold uppercase text-slate-500">Daily Insights</p>
                 {hoveredCell ? (
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-start gap-4">
                     <div className="text-3xl font-bold text-white">{hoveredCell.contributionCount}</div>
                     <div><p className="text-sm text-slate-200">Commits</p><p className="text-xs text-slate-400">{formatDateLabel(hoveredCell.date)}</p></div>
                   </div>
                 ) : <p className="text-sm text-slate-500 italic">Hover a day to see details...</p>}
             </div>
-            <div className="p-6 bg-black/20 rounded-2xl border border-white/5 flex items-center gap-4">
+            <div className="flex items-center gap-4 rounded-2xl border border-white/5 bg-black/20 p-4 sm:p-6">
               <div className="text-emerald-400 bg-emerald-400/10 p-3 rounded-xl"><CalendarRange /></div>
               <div>
                 <p className="text-sm text-slate-300">Peak day in {heatmapYear}</p>
@@ -1035,8 +1035,8 @@ export default function GitPulseDashboard() {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3 sm:gap-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 sm:p-6">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500 mb-4">Workday</p>
             {data?.contributionWindow ? (
               <div className="grid gap-3">
@@ -1054,7 +1054,7 @@ export default function GitPulseDashboard() {
             )}
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 sm:p-6">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500 mb-4">Tech Profile</p>
             {data?.languageBreakdown && data.languageBreakdown.length > 0 ? (
               <>
@@ -1068,7 +1068,7 @@ export default function GitPulseDashboard() {
                     />
                   ))}
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs">
+                <div className="flex flex-wrap gap-x-2 gap-y-2 text-xs sm:gap-x-3">
                   {data.languageBreakdown.map((language) => (
                     <button
                       key={language.name}
@@ -1092,7 +1092,7 @@ export default function GitPulseDashboard() {
             )}
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 sm:p-6">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500 mb-4">Total Impact</p>
             {data?.totalImpact ? (
               <div className="space-y-3">
@@ -1127,16 +1127,16 @@ export default function GitPulseDashboard() {
 
         {selectedLanguage && (
           <section ref={languageSectionRef} className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-white text-lg flex items-center gap-2"><ChevronRight className="text-emerald-500" /> Repositories using {selectedLanguage}</h3>
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-4 sm:p-8">
+              <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-white"><ChevronRight className="text-emerald-500" /> Repositories using {selectedLanguage}</h3>
                 <button onClick={() => setSelectedLanguage(null)} className="text-xs text-slate-500 hover:text-white">Close</button>
               </div>
               <div className="mb-5 rounded-2xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-300/80">Total repositories</p>
                 <p className="mt-1 text-2xl font-black text-white">{languageRepos.length}</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {languageRepos.map((repo) => (
                   <a
                     key={repo.nameWithOwner}
@@ -1164,9 +1164,9 @@ export default function GitPulseDashboard() {
 
         {showAllRepos && (
           <section ref={allReposSectionRef} className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-white text-lg flex items-center gap-2"><ChevronRight className="text-emerald-500" /> All Repositories</h3>
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-4 sm:p-8">
+              <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-white"><ChevronRight className="text-emerald-500" /> All Repositories</h3>
                 <button onClick={() => setShowAllRepos(false)} className="text-xs text-slate-500 hover:text-white">Close</button>
               </div>
               <div className="mb-5 rounded-2xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
@@ -1174,7 +1174,7 @@ export default function GitPulseDashboard() {
                 <p className="mt-1 text-2xl font-black text-white">{allReposCount}</p>
                 <p className="mt-1 text-xs text-slate-400">Showing {filteredAllRepos.length}{repoSearchInput.trim() ? ` matching "${repoSearchInput.trim()}"` : ''}</p>
               </div>
-              <form className="mb-4 flex gap-2" onSubmit={(event) => event.preventDefault()}>
+              <form className="mb-4 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => event.preventDefault()}>
                 <input
                   type="text"
                   value={repoSearchInput}
@@ -1182,23 +1182,25 @@ export default function GitPulseDashboard() {
                   placeholder="Search repository name..."
                   className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-emerald-400/40 focus:outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={() => setRepoSearchInput('')}
-                  disabled={!repoSearchInput}
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Clear search"
-                >
-                  ×
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-200 hover:bg-emerald-500/20"
-                >
-                  Search
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRepoSearchInput('')}
+                    disabled={!repoSearchInput}
+                    className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+                    aria-label="Clear search"
+                  >
+                    ×
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-200 hover:bg-emerald-500/20 sm:flex-none"
+                  >
+                    Search
+                  </button>
+                </div>
               </form>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {filteredAllRepos.map((repo) => (
                   <a
                     key={repo.nameWithOwner}
@@ -1246,9 +1248,9 @@ export default function GitPulseDashboard() {
 
         {selectedDate && (
           <section ref={selectedDateSectionRef} className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-white text-lg flex items-center gap-2"><ChevronRight className="text-emerald-500" /> {formatDateLabel(selectedDate)}</h3>
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-4 sm:p-8">
+              <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="flex items-center gap-2 text-lg font-bold text-white"><ChevronRight className="text-emerald-500" /> {formatDateLabel(selectedDate)}</h3>
                 <button onClick={() => setSelectedDate(null)} className="text-xs text-slate-500 hover:text-white">Close</button>
               </div>
               <div className="mb-5 rounded-2xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
@@ -1258,7 +1260,7 @@ export default function GitPulseDashboard() {
               {selectedReposLoading && (
                 <p className="mb-4 text-xs text-slate-500">Loading repository breakdown...</p>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {selectedRepos.map((repo) => (
                   <a key={repo.nameWithOwner} href={repo.url} target="_blank" rel="noreferrer" className="p-4 bg-white/5 border border-white/5 rounded-2xl hover:border-emerald-500/30 transition-all group">
                     <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Repo</p>
@@ -1280,7 +1282,7 @@ export default function GitPulseDashboard() {
               className="w-full max-w-6xl rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1220] via-[#101a30] to-[#0a0f1d] p-4 md:p-5 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="mb-3 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-lg md:text-xl font-black text-white">Role Guide</h3>
                   <p className="mt-0.5 text-xs md:text-sm text-slate-400">
