@@ -116,6 +116,15 @@ function buildCommitCountByDate(repoContributionsByDate) {
   return commitCountByDate;
 }
 
+function buildContributionDays(contributionCalendar) {
+  return (contributionCalendar?.weeks || [])
+    .flatMap((week) => week.contributionDays || [])
+    .map((day) => ({
+      date: day.date,
+      contributionCount: day.contributionCount,
+    }));
+}
+
 export async function fetchGithubStreak(username, token = import.meta.env.VITE_GITHUB_TOKEN) {
   const trimmedUsername = username?.trim();
   const useViewer = !trimmedUsername || trimmedUsername.toLowerCase() === 'me' || trimmedUsername.toLowerCase() === 'viewer';
@@ -243,20 +252,14 @@ export async function fetchGithubStreak(username, token = import.meta.env.VITE_G
   const repoContributionsByDate = buildRepoContributionsByDate(
     user.contributionsCollection.commitContributionsByRepository,
   );
-  const commitCountByDate = buildCommitCountByDate(repoContributionsByDate);
-  const contributionDays = contributionCalendar.weeks
-    .flatMap((week) => week.contributionDays)
-    .map((day) => ({
-      date: day.date,
-      contributionCount: commitCountByDate.get(day.date) || 0,
-    }));
+  const contributionDays = buildContributionDays(contributionCalendar);
   const dayMap = buildDayMap(contributionDays);
   const todayKey = toLocalDateKey(new Date());
   const yesterdayKey = toLocalDateKey(subtractDays(new Date(), 1));
   const hasContributedToday = (dayMap.get(todayKey) || 0) > 0;
   const hasContributedYesterday = (dayMap.get(yesterdayKey) || 0) > 0;
 
-  const totalCommits = contributionDays.reduce((total, day) => total + day.contributionCount, 0);
+  const totalCommits = contributionCalendar.totalContributions || contributionDays.reduce((total, day) => total + day.contributionCount, 0);
 
   return {
     username: user.login,
