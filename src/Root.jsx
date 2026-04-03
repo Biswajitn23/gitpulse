@@ -34,10 +34,6 @@ export default function Root() {
       event.preventDefault();
       setDeferredInstallPrompt(event);
       setShowInstallPrompt(true);
-
-      window.setTimeout(() => {
-        setShowInstallPrompt(false);
-      }, 4500);
     };
 
     const handleAppInstalled = () => {

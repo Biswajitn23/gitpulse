@@ -343,9 +343,12 @@ export default function GitPulseDashboard() {
   const [showAllRepos, setShowAllRepos] = useState(false);
   const [repoSearchInput, setRepoSearchInput] = useState('');
   const [showRoleGuide, setShowRoleGuide] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [tappedDate, setTappedDate] = useState(null);
   const languageSectionRef = useRef(null);
   const allReposSectionRef = useRef(null);
   const selectedDateSectionRef = useRef(null);
+  const tapHighlightTimeoutRef = useRef(null);
 
   // Memoized Stats
   const progressPercent = useMemo(() => data ? Math.min(100, Math.round((data.currentStreak / DAILY_GOAL) * 100)) : 0, [data]);
@@ -376,6 +379,12 @@ export default function GitPulseDashboard() {
     monthDays.forEach(d => (data?.repoContributionsByDate?.[d.date] || []).forEach(r => activeRepos.add(r.nameWithOwner)));
     return { commits, activeDays, activeRepos: activeRepos.size, consistency: monthDays.length ? Math.round((activeDays / monthDays.length) * 100) : 0 };
   }, [data, heatmapYear, nowTime]);
+
+  const activeInsightCell = useMemo(() => {
+    if (hoveredCell) return hoveredCell;
+    if (!selectedDate) return null;
+    return heatmapCells.find((cell) => !cell.isPadding && cell.date === selectedDate) || null;
+  }, [hoveredCell, selectedDate, heatmapCells]);
 
   const allRepos = useMemo(() => {
     if (Array.isArray(data?.allRepositories) && data.allRepositories.length > 0) {
@@ -422,7 +431,7 @@ export default function GitPulseDashboard() {
   const profileAvatar = data?.avatarUrl || firebaseUser?.photoURL || restoredAvatar;
   const isGitHubPro = Boolean(data?.isGitHubPro);
   const isEvening = nowTime.getHours() >= 20;
-  const canUseAccount = Boolean(firebaseUser && authToken);
+  const canUseAccount = Boolean(authToken);
 
   useEffect(() => {
     const syncViewFromHash = () => {
@@ -433,6 +442,28 @@ export default function GitPulseDashboard() {
     window.addEventListener('hashchange', syncViewFromHash);
 
     return () => window.removeEventListener('hashchange', syncViewFromHash);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const pointerQuery = window.matchMedia('(hover: none), (pointer: coarse)');
+    const updateTouchPreference = () => setIsTouchDevice(pointerQuery.matches);
+
+    updateTouchPreference();
+    pointerQuery.addEventListener('change', updateTouchPreference);
+
+    return () => {
+      pointerQuery.removeEventListener('change', updateTouchPreference);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (tapHighlightTimeoutRef.current) {
+        clearTimeout(tapHighlightTimeoutRef.current);
+      }
+    };
   }, []);
 
   // --- Effects (Logic Preserved) ---
@@ -447,11 +478,23 @@ export default function GitPulseDashboard() {
     try { auth = getFirebaseAuth(); } catch (e) { setAuthStep('error'); return; }
     return onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      if (!user) { setAuthToken(''); setAuthStep('idle'); return; }
       const isExplicitLogout = window.localStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
       if (isExplicitLogout) { setAuthToken(''); setAuthStep('idle'); return; }
       const storedToken = sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
-      if (storedToken) { setAuthToken(storedToken); setAuthStep('signed-in'); }
+      if (!user) {
+        if (storedToken) {
+          setAuthToken(storedToken);
+          setAuthStep('signed-in');
+          return;
+        }
+        setAuthToken('');
+        setAuthStep('idle');
+        return;
+      }
+      if (storedToken) {
+        setAuthToken(storedToken);
+        setAuthStep('signed-in');
+      }
     });
   }, []);
 
@@ -728,6 +771,15 @@ export default function GitPulseDashboard() {
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
+
+    const existingToken = sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
+    const isExplicitLogout = window.localStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
+    if (existingToken && !isExplicitLogout) {
+      setAuthToken(existingToken);
+      setAuthStep('signed-in');
+      return;
+    }
+
     setAuthStep('starting');
     try {
       const auth = getFirebaseAuth();
@@ -753,6 +805,23 @@ export default function GitPulseDashboard() {
 
   const handleOpenProfilePage = () => {
     window.location.hash = '#profile';
+  };
+
+  const handleHeatmapCellClick = (cell) => {
+    setHoveredCell(cell);
+    setSelectedDate(cell.date);
+
+    if (!isTouchDevice) return;
+
+    if (tapHighlightTimeoutRef.current) {
+      clearTimeout(tapHighlightTimeoutRef.current);
+    }
+
+    setTappedDate(cell.date);
+    tapHighlightTimeoutRef.current = setTimeout(() => {
+      setTappedDate(null);
+      tapHighlightTimeoutRef.current = null;
+    }, 260);
   };
 
   const handleBackFromProfilePage = () => {
@@ -1006,8 +1075,8 @@ export default function GitPulseDashboard() {
                   <div
                     key={cell.key}
                     onMouseEnter={() => setHoveredCell(cell)}
-                    onClick={() => setSelectedDate(cell.date)}
-                    className={`h-3.5 w-3.5 rounded-[3px] border cursor-pointer transition-all duration-300 hover:scale-150 hover:z-10 ${colorClass} ${selectedDate === cell.date ? 'ring-2 ring-white ring-offset-2 ring-offset-[#020617]' : ''}`}
+                    onClick={() => handleHeatmapCellClick(cell)}
+                    className={`h-3.5 w-3.5 rounded-[3px] border cursor-pointer transition-all duration-300 hover:scale-150 hover:z-10 ${colorClass} ${isTouchDevice && tappedDate === cell.date ? 'scale-150 z-10 shadow-[0_0_16px_rgba(16,185,129,0.55)]' : ''} ${selectedDate === cell.date ? 'ring-2 ring-white ring-offset-2 ring-offset-[#020617]' : ''}`}
                     title={`${cell.date}: ${count} commits`}
                   />
                 );
@@ -1018,12 +1087,12 @@ export default function GitPulseDashboard() {
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 sm:gap-6">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4 sm:p-6">
                 <p className="mb-4 text-xs font-bold uppercase text-slate-500">Daily Insights</p>
-                {hoveredCell ? (
+                {activeInsightCell ? (
                   <div className="flex items-start gap-4">
-                    <div className="text-3xl font-bold text-white">{hoveredCell.contributionCount}</div>
-                    <div><p className="text-sm text-slate-200">Commits</p><p className="text-xs text-slate-400">{formatDateLabel(hoveredCell.date)}</p></div>
+                    <div className="text-3xl font-bold text-white">{activeInsightCell.contributionCount}</div>
+                    <div><p className="text-sm text-slate-200">Commits</p><p className="text-xs text-slate-400">{formatDateLabel(activeInsightCell.date)}</p></div>
                   </div>
-                ) : <p className="text-sm text-slate-500 italic">Hover a day to see details...</p>}
+                ) : <p className="text-sm text-slate-500 italic">Hover or tap a day to see details...</p>}
             </div>
             <div className="flex items-center gap-4 rounded-2xl border border-white/5 bg-black/20 p-4 sm:p-6">
               <div className="text-emerald-400 bg-emerald-400/10 p-3 rounded-xl"><CalendarRange /></div>
