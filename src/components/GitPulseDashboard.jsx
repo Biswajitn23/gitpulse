@@ -432,6 +432,7 @@ export default function GitPulseDashboard() {
   const isGitHubPro = Boolean(data?.isGitHubPro);
   const isEvening = nowTime.getHours() >= 20;
   const canUseAccount = Boolean(authToken);
+  const isInitialDataLoading = canUseAccount && loading && !data;
 
   useEffect(() => {
     const syncViewFromHash = () => {
@@ -879,6 +880,57 @@ export default function GitPulseDashboard() {
               </button>
             </section>
           </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (isInitialDataLoading) {
+    return (
+      <main className="min-h-screen bg-[#020617] text-slate-200 animate-pulse">
+        <nav className="border-b border-white/5 bg-[#020617]/50 backdrop-blur-md sticky top-0 z-50">
+          <div className="mx-auto flex h-auto max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:px-4 sm:h-16">
+            <SiteBrand sizeClassName="h-8 w-8" textClassName="text-sm sm:text-base" />
+            <div className="h-9 w-28 rounded-full border border-white/10 bg-white/5" />
+          </div>
+        </nav>
+
+        <div className="mx-auto max-w-7xl px-3 py-6 sm:px-4 sm:py-8">
+          <header className="mb-6 flex flex-col gap-4 md:mb-10">
+            <div className="h-10 w-52 rounded-xl bg-white/10" />
+            <div className="h-5 w-72 max-w-full rounded-lg bg-white/5" />
+          </header>
+
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 sm:gap-6">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={`stat-skeleton-${index}`} className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 sm:p-8">
+                <div className="h-4 w-24 rounded bg-white/10" />
+                <div className="mt-5 h-12 w-28 rounded-xl bg-white/10" />
+                <div className="mt-5 h-3 w-20 rounded bg-white/5" />
+              </div>
+            ))}
+          </div>
+
+          <section className="rounded-[2rem] border border-white/10 bg-white/[0.01] p-4 sm:p-8">
+            <div className="mb-6 h-6 w-44 rounded-lg bg-white/10" />
+            <div className="mb-6 grid grid-flow-col grid-rows-7 gap-1.5 min-w-max overflow-x-auto pb-2">
+              {Array.from({ length: 84 }).map((_, index) => (
+                <div key={`heat-skeleton-${index}`} className="h-3.5 w-3.5 rounded-[3px] bg-emerald-900/40" />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 sm:gap-6">
+              <div className="rounded-2xl border border-white/5 bg-black/20 p-4 sm:p-6">
+                <div className="h-4 w-28 rounded bg-white/10" />
+                <div className="mt-4 h-10 w-24 rounded-lg bg-white/10" />
+              </div>
+              <div className="rounded-2xl border border-white/5 bg-black/20 p-4 sm:p-6">
+                <div className="h-4 w-36 rounded bg-white/10" />
+                <div className="mt-4 h-5 w-56 max-w-full rounded bg-white/10" />
+              </div>
+            </div>
+          </section>
+
+          {error && <p className="mt-4 text-xs text-rose-300">{error}</p>}
         </div>
       </main>
     );
