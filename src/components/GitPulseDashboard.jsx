@@ -978,7 +978,7 @@ export default function GitPulseDashboard() {
           <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={handleOpenProfilePage}
-              className={`md:hidden h-10 w-10 rounded-full overflow-hidden transition-all ${isGitHubPro ? 'bg-[conic-gradient(from_180deg_at_50%_50%,#f5d0fe_0deg,#c084fc_120deg,#fbbf24_240deg,#f5d0fe_360deg)] p-[2px] shadow-[0_0_20px_rgba(168,85,247,0.35)] animate-pulse' : 'ring-2 bg-white/5 ring-emerald-500/30'}`}
+              className={`md:hidden h-10 w-10 rounded-full overflow-hidden transition-all ${isGitHubPro ? 'bg-[conic-gradient(from_180deg_at_50%_50%,#f5d0fe_0deg,#c084fc_120deg,#fbbf24_240deg,#f5d0fe_360deg)] p-[2px] shadow-[0_0_20px_rgba(168,85,247,0.35)]' : 'ring-2 bg-white/5 ring-emerald-500/30'}`}
             >
               <span className={`block h-full w-full rounded-full overflow-hidden ${isGitHubPro ? 'bg-[#020617]' : ''}`}>
                 <img src={profileAvatar} className={`h-full w-full object-cover ${isGitHubPro ? 'rounded-full ring-1 ring-white/15' : ''}`} alt="" />
