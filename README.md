@@ -2,7 +2,7 @@
 
 GitPulse is a dark, neon-styled dashboard for tracking GitHub contribution streaks, activity patterns, and momentum over time. It combines GitHub data, Firebase auth, PWA install support, and streak intelligence into a single focused experience.
 
-[Live Demo](https://gitpulsedashboard.vercel.app/)
+[Live Website](https://gitpulsedashboard.vercel.app/)
 
 ![GitPulse preview](public/readme-hero.svg)
 
