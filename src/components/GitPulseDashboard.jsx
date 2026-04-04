@@ -13,7 +13,7 @@ import {
   ChevronRight,
   TrendingUp,
 } from 'lucide-react';
-import { GithubAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { GithubAuthProvider, getRedirectResult, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
 import { useGithubStreak } from '../hooks/useGithubStreak';
 import { createGithubProvider, getFirebaseAuth } from '../lib/firebase';
 import ProfilePage from './ProfilePage';
@@ -311,6 +311,17 @@ function buildPeakDayStats(days, year) {
     date: peakDay.date,
     commits: peakDay.contributionCount,
   };
+}
+
+function shouldUseRedirectAuth() {
+  if (typeof window === 'undefined') return false;
+
+  const userAgent = window.navigator?.userAgent || '';
+  const isMobileUserAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent);
+  const isInAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|WebView|wv/i.test(userAgent);
+  const isStandalone = Boolean(window.navigator?.standalone) || window.matchMedia?.('(display-mode: standalone)')?.matches;
+
+  return isMobileUserAgent || isInAppBrowser || isStandalone;
 }
 
 // --- Main Component ---
@@ -773,6 +784,7 @@ export default function GitPulseDashboard() {
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
+    setAuthMessage('');
 
     const existingToken = sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
     const isExplicitLogout = window.localStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
@@ -785,6 +797,13 @@ export default function GitPulseDashboard() {
     setAuthStep('starting');
     try {
       const auth = getFirebaseAuth();
+      const provider = createGithubProvider();
+
+      if (shouldUseRedirectAuth()) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
       const result = await signInWithPopup(auth, createGithubProvider());
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = sanitizeCredential(credential?.accessToken || '');
@@ -808,7 +827,10 @@ export default function GitPulseDashboard() {
       setAuthToken(token);
       setFirebaseUser(result.user);
       setAuthStep('signed-in');
-    } catch (e) { setAuthStep('error'); setAuthMessage(e.message); }
+    } catch (e) {
+      setAuthStep('error');
+      setAuthMessage(e.message || 'Unable to sign in with GitHub.');
+    }
   };
 
   const handleSignOut = async () => {
@@ -877,6 +899,68 @@ export default function GitPulseDashboard() {
     }
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const handleRedirectSignIn = async () => {
+      let auth;
+      try {
+        auth = getFirebaseAuth();
+      } catch {
+        return;
+      }
+
+      try {
+        const result = await getRedirectResult(auth);
+        if (!isMounted || !result) return;
+
+        const credential = GithubAuthProvider.credentialFromResult(result);
+        const token = sanitizeCredential(credential?.accessToken || '');
+        const signedInLogin = sanitizeCredential(result?.additionalUserInfo?.profile?.login || '');
+        const lastSignedOutAccount = sanitizeCredential(window.localStorage.getItem(LAST_SIGNED_OUT_ACCOUNT_KEY) || '');
+
+        if (lastSignedOutAccount && signedInLogin && signedInLogin.toLowerCase() === lastSignedOutAccount.toLowerCase()) {
+          try {
+            await signOut(auth);
+          } catch {}
+
+          if (!isMounted) return;
+          setFirebaseUser(null);
+          setAuthToken('');
+          setAuthStep('error');
+          setAuthMessage('Please choose a different GitHub account to continue.');
+          return;
+        }
+
+        if (!token) {
+          setAuthStep('error');
+          setAuthMessage('GitHub did not return an access token. Please try again.');
+          return;
+        }
+
+        window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+        if (signedInLogin) {
+          window.localStorage.removeItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
+        }
+
+        window.localStorage.setItem(AUTH_STORAGE_KEY, token);
+        setAuthToken(token);
+        setFirebaseUser(result.user);
+        setAuthStep('signed-in');
+      } catch (error) {
+        if (!isMounted) return;
+        setAuthStep('error');
+        setAuthMessage(error?.message || 'Unable to complete mobile sign in.');
+      }
+    };
+
+    handleRedirectSignIn();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // --- Render (Modernized UI) ---
 
   if (!canUseAccount) {
@@ -898,6 +982,7 @@ export default function GitPulseDashboard() {
                 <Github className="h-5 w-5" />
                 {authStep === 'starting' ? 'Connecting...' : 'Connect GitHub'}
               </button>
+              {authMessage ? <p className="mt-3 text-xs text-rose-300">{authMessage}</p> : null}
             </section>
           </div>
         </div>
@@ -1421,47 +1506,48 @@ export default function GitPulseDashboard() {
 
         {showRoleGuide && (
           <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+            className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/70 px-3 py-4 sm:items-center sm:p-4"
             onClick={() => setShowRoleGuide(false)}
           >
             <div
-              className="w-full max-w-6xl rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1220] via-[#101a30] to-[#0a0f1d] p-4 md:p-5 shadow-2xl"
+              className="w-full max-w-6xl max-h-[calc(100vh-2rem)] overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1220] via-[#101a30] to-[#0a0f1d] p-3 sm:p-4 md:p-5 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="mb-3 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+              <div className="mb-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <div>
-                  <h3 className="text-lg md:text-xl font-black text-white">Role Guide</h3>
-                  <p className="mt-0.5 text-xs md:text-sm text-slate-400">
+                  <h3 className="text-xl font-black text-white md:text-xl">Role Guide</h3>
+                  <p className="mt-0.5 text-sm text-slate-400 md:text-sm">
                     Active role: <span className={`font-bold ${currentRoleTheme.accent}`}>{currentRoleName}</span>
                   </p>
                 </div>
                 <button
                   onClick={() => setShowRoleGuide(false)}
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-white/10"
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10"
                 >
                   Close
                 </button>
               </div>
 
-              <div className={`mb-3 rounded-2xl border p-3 ${currentRoleTheme.card}`}>
+              <div className={`mb-3 rounded-2xl border p-3 sm:p-4 ${currentRoleTheme.card}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${currentRoleTheme.accent}`}>
                       {currentRoleTheme.icon} Active Role
                     </p>
-                    <p className="mt-1 text-sm md:text-base font-black text-white">You are in the {currentRoleName} lane.</p>
-                    <p className="mt-0.5 text-xs md:text-sm text-slate-200/85">This role is selected from your current contribution mix and challenge path.</p>
+                    <p className="mt-1 text-base font-black text-white md:text-base">You are in the {currentRoleName} lane.</p>
+                    <p className="mt-0.5 text-sm text-slate-200/85 md:text-sm">This role is selected from your current contribution mix and challenge path.</p>
                   </div>
                   {nextRole && (
                     <div className={`rounded-xl border px-3 py-1.5 ${nextRoleTheme.card}`}>
                       <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${nextRoleTheme.accent}`}>Next Target</p>
-                      <p className={`mt-1 text-sm font-black ${nextRoleTheme.accent}`}>{nextRoleTheme.icon} {nextRole.name}</p>
+                      <p className={`mt-1 text-base font-black ${nextRoleTheme.accent}`}>{nextRoleTheme.icon} {nextRole.name}</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              <div className="max-h-[calc(100vh-15.5rem)] overflow-y-auto pr-1 sm:max-h-[calc(100vh-16rem)] sm:pr-2">
+                <div className="grid grid-cols-1 gap-3 pb-1 md:grid-cols-2 xl:grid-cols-3">
                 {ROLE_GUIDE.map((role) => {
                   const roleTheme = getRoleTheme(role.name);
                   const isCurrentRole = data?.activityRole === role.name;
@@ -1469,31 +1555,32 @@ export default function GitPulseDashboard() {
                   return (
                     <div
                       key={role.name}
-                      className={`rounded-xl border p-2.5 transition-all ${roleTheme.card} ${isCurrentRole ? `${roleTheme.badgeAnimation} scale-[1.01] shadow-[0_0_20px_rgba(255,255,255,0.08)]` : 'opacity-90 hover:opacity-100 hover:-translate-y-0.5'}`}
+                      className={`rounded-xl border p-3 sm:p-3.5 transition-all ${roleTheme.card} ${isCurrentRole ? `${roleTheme.badgeAnimation} scale-[1.01] shadow-[0_0_20px_rgba(255,255,255,0.08)]` : 'opacity-90 hover:opacity-100 hover:-translate-y-0.5'}`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className={`text-[11px] font-black uppercase tracking-[0.14em] ${roleTheme.accent}`}>
+                        <p className={`text-xs font-black uppercase tracking-[0.14em] ${roleTheme.accent}`}>
                           {roleTheme.icon} {role.name}
                         </p>
                         {isCurrentRole && (
-                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] ${roleTheme.badge}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${roleTheme.badge}`}>
                             Active
                           </span>
                         )}
                       </div>
-                      <p className={`mt-1 text-[11px] leading-relaxed ${roleTheme.accent} opacity-90`}>
+                      <p className={`mt-1.5 text-xs leading-relaxed ${roleTheme.accent} opacity-90`}>
                         <span className="font-bold">Rule:</span> {role.condition}
                       </p>
-                      <p className={`mt-1 text-[11px] leading-relaxed ${roleTheme.accent}`}>
+                      <p className={`mt-1.5 text-xs leading-relaxed ${roleTheme.accent}`}>
                         <span className="font-bold">Do:</span> {role.action}
                       </p>
-                      <div className="mt-1.5 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5">
-                        <p className={`text-[9px] font-black uppercase tracking-[0.14em] ${roleTheme.accent}`}>Challenge</p>
-                        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-200">{role.challenge}</p>
+                      <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
+                        <p className={`text-[10px] font-black uppercase tracking-[0.14em] ${roleTheme.accent}`}>Challenge</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-slate-200">{role.challenge}</p>
                       </div>
                     </div>
                   );
                 })}
+                </div>
               </div>
             </div>
           </div>
