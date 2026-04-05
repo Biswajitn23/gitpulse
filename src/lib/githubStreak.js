@@ -266,7 +266,16 @@ function buildContributionDays(contributionCalendar) {
     }));
 }
 
-export async function fetchGithubStreak(username, token = import.meta.env.VITE_GITHUB_TOKEN) {
+function getFallbackGithubToken() {
+  const viteToken = typeof import.meta !== 'undefined' && import.meta?.env
+    ? import.meta.env.VITE_GITHUB_TOKEN
+    : '';
+  const processToken = typeof process !== 'undefined' ? process?.env?.VITE_GITHUB_TOKEN || process?.env?.GITHUB_TOKEN : '';
+  return String(viteToken || processToken || '').trim();
+}
+
+export async function fetchGithubStreak(username, tokenInput) {
+  const token = String(tokenInput || getFallbackGithubToken()).trim();
   const trimmedUsername = username?.trim();
   const useViewer = !trimmedUsername || trimmedUsername.toLowerCase() === 'me' || trimmedUsername.toLowerCase() === 'viewer';
 

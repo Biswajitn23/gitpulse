@@ -1,5 +1,42 @@
 import { fetchGithubStreak } from '../src/lib/githubStreak.js';
 
+function parseRequestBody(body) {
+  if (!body) {
+    return {};
+  }
+
+  if (typeof body === 'string') {
+    const trimmed = body.trim();
+    return trimmed ? JSON.parse(trimmed) : {};
+  }
+
+  if (typeof body === 'object') {
+    return body;
+  }
+
+  return {};
+}
+
+function getStatusCodeForError(message) {
+  if (/missing github token/i.test(message)) {
+    return 400;
+  }
+
+  if (/invalid github username|could not resolve to a user/i.test(message)) {
+    return 404;
+  }
+
+  if (/token is invalid or expired|bad credentials|expired token|requires authentication/i.test(message)) {
+    return 401;
+  }
+
+  if (/api request failed|rate limit|abuse detection/i.test(message)) {
+    return 502;
+  }
+
+  return 500;
+}
+
 function readBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -27,6 +64,12 @@ function readBody(request) {
 }
 
 export default async function handler(request, response) {
+  if (request.method === 'OPTIONS') {
+    response.setHeader('Allow', 'POST, OPTIONS');
+    response.status(204).end();
+    return;
+  }
+
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST');
     response.status(405).json({ error: 'Method not allowed.' });
@@ -34,7 +77,8 @@ export default async function handler(request, response) {
   }
 
   try {
-    const body = request.body && typeof request.body === 'object' ? request.body : await readBody(request);
+    const parsedBody = parseRequestBody(request.body);
+    const body = Object.keys(parsedBody).length ? parsedBody : parseRequestBody(await readBody(request));
     const token = String(body?.token || '').trim();
     const username = String(body?.username || '').trim();
 
@@ -46,8 +90,8 @@ export default async function handler(request, response) {
     const data = await fetchGithubStreak(username, token);
     response.status(200).json({ data });
   } catch (error) {
-    response
-      .status(500)
-      .json({ error: error instanceof Error ? error.message : 'Server error.' });
+    const message = error instanceof Error ? error.message : 'Server error.';
+    const statusCode = getStatusCodeForError(message);
+    response.status(statusCode).json({ error: message });
   }
 }
