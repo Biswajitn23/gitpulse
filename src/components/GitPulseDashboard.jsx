@@ -317,11 +317,27 @@ function shouldUseRedirectAuth() {
   if (typeof window === 'undefined') return false;
 
   const userAgent = window.navigator?.userAgent || '';
-  const isMobileUserAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(userAgent);
   const isInAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|WebView|wv/i.test(userAgent);
   const isStandalone = Boolean(window.navigator?.standalone) || window.matchMedia?.('(display-mode: standalone)')?.matches;
 
-  return isMobileUserAgent || isInAppBrowser || isStandalone;
+  try {
+    const probeKey = '__gitpulse_redirect_probe__';
+    window.sessionStorage.setItem(probeKey, '1');
+    window.sessionStorage.removeItem(probeKey);
+  } catch {
+    return false;
+  }
+
+  // Use redirect only in constrained browser contexts where popups are commonly blocked.
+  // Standard mobile browsers should prefer popup auth to avoid redirect state failures.
+  return isInAppBrowser || isStandalone;
+}
+
+function isMissingRedirectStateError(error) {
+  const message = String(error?.message || '');
+  const code = String(error?.code || '');
+  return /missing initial state|no auth event|unable to process request due to missing initial state/i.test(message)
+    || /missing-initial-state|no-auth-event/i.test(code);
 }
 
 // --- Main Component ---
@@ -946,6 +962,12 @@ export default function GitPulseDashboard() {
         setAuthStep('signed-in');
       } catch (error) {
         if (!isMounted) return;
+
+        if (isMissingRedirectStateError(error)) {
+          setAuthStep('idle');
+          return;
+        }
+
         setAuthStep('error');
         setAuthMessage(error?.message || 'Unable to complete mobile sign in.');
       }
