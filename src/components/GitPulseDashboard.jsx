@@ -808,16 +808,6 @@ export default function GitPulseDashboard() {
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = sanitizeCredential(credential?.accessToken || '');
       const signedInLogin = sanitizeCredential(result?.additionalUserInfo?.profile?.login || '');
-      const lastSignedOutAccount = sanitizeCredential(window.localStorage.getItem(LAST_SIGNED_OUT_ACCOUNT_KEY) || '');
-
-      if (lastSignedOutAccount && signedInLogin && signedInLogin.toLowerCase() === lastSignedOutAccount.toLowerCase()) {
-        try { await signOut(auth); } catch (signOutError) {}
-        setFirebaseUser(null);
-        setAuthToken('');
-        setAuthStep('error');
-        setAuthMessage('Please choose a different GitHub account to continue.');
-        return;
-      }
 
       window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
       if (signedInLogin) {
@@ -917,20 +907,6 @@ export default function GitPulseDashboard() {
         const credential = GithubAuthProvider.credentialFromResult(result);
         const token = sanitizeCredential(credential?.accessToken || '');
         const signedInLogin = sanitizeCredential(result?.additionalUserInfo?.profile?.login || '');
-        const lastSignedOutAccount = sanitizeCredential(window.localStorage.getItem(LAST_SIGNED_OUT_ACCOUNT_KEY) || '');
-
-        if (lastSignedOutAccount && signedInLogin && signedInLogin.toLowerCase() === lastSignedOutAccount.toLowerCase()) {
-          try {
-            await signOut(auth);
-          } catch {}
-
-          if (!isMounted) return;
-          setFirebaseUser(null);
-          setAuthToken('');
-          setAuthStep('error');
-          setAuthMessage('Please choose a different GitHub account to continue.');
-          return;
-        }
 
         if (!token) {
           setAuthStep('error');
