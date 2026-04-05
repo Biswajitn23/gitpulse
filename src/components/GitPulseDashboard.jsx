@@ -357,6 +357,7 @@ export default function GitPulseDashboard() {
   const [showRoleGuide, setShowRoleGuide] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [tappedDate, setTappedDate] = useState(null);
+  const hasRecoveredUnauthorizedTokenRef = useRef(false);
   const languageSectionRef = useRef(null);
   const allReposSectionRef = useRef(null);
   const selectedDateSectionRef = useRef(null);
@@ -515,6 +516,26 @@ export default function GitPulseDashboard() {
     if (authToken) window.localStorage.setItem(AUTH_STORAGE_KEY, authToken);
     else window.localStorage.removeItem(AUTH_STORAGE_KEY);
   }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) {
+      hasRecoveredUnauthorizedTokenRef.current = false;
+      return;
+    }
+
+    if (!error || hasRecoveredUnauthorizedTokenRef.current) {
+      return;
+    }
+
+    if (/token is invalid or expired|bad credentials|unauthorized|401/i.test(error)) {
+      hasRecoveredUnauthorizedTokenRef.current = true;
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      setAuthToken('');
+      setAuthStep('idle');
+      setAuthMessage('Your GitHub session expired. Please reconnect your GitHub account.');
+    }
+  }, [authToken, error]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

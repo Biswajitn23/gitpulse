@@ -31,7 +31,10 @@ export function useGithubStreak(username, token = '') {
         const payload = await response.json();
 
         if (!response.ok) {
-          throw new Error(payload?.error || 'Unable to load streak data.');
+          const fallbackMessage = response.status === 401
+            ? 'GitHub token is invalid or expired.'
+            : 'Unable to load streak data.';
+          throw new Error(payload?.error || fallbackMessage);
         }
 
         const result = payload?.data || null;
