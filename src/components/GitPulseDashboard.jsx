@@ -313,12 +313,8 @@ function buildPeakDayStats(days, year) {
   };
 }
 
-function shouldUseRedirectAuth() {
+function canUseRedirectAuth() {
   if (typeof window === 'undefined') return false;
-
-  const userAgent = window.navigator?.userAgent || '';
-  const isInAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|WebView|wv/i.test(userAgent);
-  const isStandalone = Boolean(window.navigator?.standalone) || window.matchMedia?.('(display-mode: standalone)')?.matches;
 
   try {
     const probeKey = '__gitpulse_redirect_probe__';
@@ -328,9 +324,14 @@ function shouldUseRedirectAuth() {
     return false;
   }
 
-  // Use redirect only in constrained browser contexts where popups are commonly blocked.
-  // Standard mobile browsers should prefer popup auth to avoid redirect state failures.
-  return isInAppBrowser || isStandalone;
+  return true;
+}
+
+function shouldFallbackToRedirect(error) {
+  const message = String(error?.message || '').toLowerCase();
+  const code = String(error?.code || '').toLowerCase();
+  return /popup-blocked|popup closed|operation-not-supported|unauthorized-domain|web-storage-unsupported/i.test(message)
+    || /popup-blocked|popup-closed-by-user|operation-not-supported-in-this-environment|unauthorized-domain|web-storage-unsupported/i.test(code);
 }
 
 function isMissingRedirectStateError(error) {
@@ -835,13 +836,19 @@ export default function GitPulseDashboard() {
     try {
       const auth = getFirebaseAuth();
       const provider = createGithubProvider();
+      let result;
 
-      if (shouldUseRedirectAuth()) {
-        await signInWithRedirect(auth, provider);
-        return;
+      try {
+        result = await signInWithPopup(auth, provider);
+      } catch (popupError) {
+        if (shouldFallbackToRedirect(popupError) && canUseRedirectAuth()) {
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+
+        throw popupError;
       }
 
-      const result = await signInWithPopup(auth, createGithubProvider());
       const credential = GithubAuthProvider.credentialFromResult(result);
       const token = sanitizeCredential(credential?.accessToken || '');
       const signedInLogin = sanitizeCredential(result?.additionalUserInfo?.profile?.login || '');
@@ -965,6 +972,7 @@ export default function GitPulseDashboard() {
 
         if (isMissingRedirectStateError(error)) {
           setAuthStep('idle');
+          setAuthMessage('Sign-in could not be restored in this PWA session. Tap Connect GitHub again.');
           return;
         }
 
