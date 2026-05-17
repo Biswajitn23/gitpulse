@@ -1,3 +1,4 @@
+import React from 'react';
 import { useEffect } from 'react';
 import Lenis from 'lenis';
 import App from './App';
@@ -22,6 +23,39 @@ const ASCII_BANNER_STYLE = [
 ].join('; ');
 
 const BANNER_FLAG = '__gitpulseBannerLogged__';
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error('GitPulse crashed on the client:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="flex min-h-screen items-center justify-center bg-[#020617] px-4 py-8 text-slate-100">
+          <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-center shadow-2xl">
+            <h1 className="text-2xl font-black text-white">GitPulse</h1>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              The app hit a browser crash or incompatible mobile state.
+              Refresh the page, clear site storage, or sign in again.
+            </p>
+          </section>
+        </main>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export default function Root() {
   useEffect(() => {
@@ -62,8 +96,8 @@ export default function Root() {
   }, []);
 
   return (
-    <>
+    <AppErrorBoundary>
       <App />
-    </>
+    </AppErrorBoundary>
   );
 }
