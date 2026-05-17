@@ -24,6 +24,31 @@ const ASCII_BANNER_STYLE = [
 
 const BANNER_FLAG = '__gitpulseBannerLogged__';
 
+const RECOVERY_STORAGE_KEYS = [
+  'gitpulse-github-token',
+  'gitpulse-account-username',
+  'gitpulse-account-avatar',
+  'gitpulse-last-signed-out-account',
+  'gitpulse-alerts-enabled',
+  'gitpulse-explicit-logout',
+  'gitpulse-notification-cache',
+  'gitpulse-last-active-at',
+];
+
+function clearGitPulseStorage() {
+  if (typeof window === 'undefined') return;
+
+  const storageAreas = [window.localStorage, window.sessionStorage];
+
+  for (const storage of storageAreas) {
+    try {
+      RECOVERY_STORAGE_KEYS.forEach((key) => storage.removeItem(key));
+    } catch {
+      // Ignore browsers that block storage access.
+    }
+  }
+}
+
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -38,6 +63,11 @@ class AppErrorBoundary extends React.Component {
     console.error('GitPulse crashed on the client:', error);
   }
 
+  handleRecovery = () => {
+    clearGitPulseStorage();
+    window.location.reload();
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -45,9 +75,16 @@ class AppErrorBoundary extends React.Component {
           <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-center shadow-2xl">
             <h1 className="text-2xl font-black text-white">GitPulse</h1>
             <p className="mt-3 text-sm leading-relaxed text-slate-300">
-              The app hit a browser crash or incompatible mobile state.
-              Refresh the page, clear site storage, or sign in again.
+              GitPulse ran into a mobile browser problem.
+              Tap reset to clear the app state and reopen.
             </p>
+            <button
+              type="button"
+              onClick={this.handleRecovery}
+              className="mt-5 inline-flex items-center justify-center rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-300"
+            >
+              Reset GitPulse
+            </button>
           </section>
         </main>
       );
