@@ -1,8 +1,11 @@
 import http from 'node:http';
-import { createServer as createViteServer } from 'vite';
+import os from 'node:os';
+import { createServer as createViteServer, loadEnv } from 'vite';
 import { fetchGithubStreak } from './src/lib/githubStreak.js';
 
-const PORT = Number(process.env.PORT || 5173);
+const env = loadEnv(process.env.NODE_ENV || 'development', process.cwd(), '');
+const PORT = Number(env.PORT || process.env.PORT || 5173);
+const HOST = env.HOST || process.env.HOST || '::';
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -67,6 +70,7 @@ const server = http.createServer(async (request, response) => {
 vite = await createViteServer({
   server: {
     middlewareMode: true,
+    host: HOST,
     hmr: {
       server,
     },
@@ -87,7 +91,7 @@ function listenWithFallback(port, attemptsLeft = 10) {
     };
 
     server.once('error', onError);
-    server.listen(port, () => {
+    server.listen(port, HOST, () => {
       server.off('error', onError);
       resolve(port);
     });
@@ -104,10 +108,32 @@ function printAsciiBanner() {
 `);
 }
 
+function getLanUrls(port) {
+  const urls = [];
+  const interfaces = os.networkInterfaces();
+
+  for (const networkInterface of Object.values(interfaces)) {
+    for (const address of networkInterface || []) {
+      if (address.family === 'IPv4' && !address.internal) {
+        urls.push(`http://${address.address}:${port}`);
+      }
+    }
+  }
+
+  return urls;
+}
+
 try {
   printAsciiBanner();
   const activePort = await listenWithFallback(PORT);
   console.log(`GitPulse API + Vite server running at http://localhost:${activePort}`);
+  console.log(`Direct loopback URL: http://127.0.0.1:${activePort}`);
+  const lanUrls = getLanUrls(activePort);
+
+  if (lanUrls.length) {
+    console.log(`Open on your phone with one of these network URLs:`);
+    lanUrls.forEach((url) => console.log(url));
+  }
 } catch (error) {
   console.error(error);
   process.exit(1);

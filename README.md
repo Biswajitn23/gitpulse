@@ -64,7 +64,15 @@ The design goal is simple: make GitHub activity feel immediate, elegant, and eas
 
 ## Configuration
 
-Create a `.env` file in the project root and add the values you use for auth and GitHub access.
+Create a `.env.local` file in the project root and add the values you use for auth and GitHub access.
+
+If the same variables are already set in Vercel, pull them into your local workspace with the Vercel CLI:
+
+```bash
+vercel env pull .env.local
+```
+
+You can also copy the template from [.env.example](.env.example).
 
 ```bash
 VITE_FIREBASE_API_KEY=...
@@ -72,10 +80,13 @@ VITE_FIREBASE_AUTH_DOMAIN=...
 VITE_FIREBASE_PROJECT_ID=...
 VITE_FIREBASE_APP_ID=...
 VITE_GITHUB_TOKEN=...
+HOST=0.0.0.0
+PORT=5173
 ```
 
 - `VITE_FIREBASE_*` powers Firebase Sign-In with GitHub.
 - `VITE_GITHUB_TOKEN` lets the streak API resolve GitHub data locally.
+- `HOST` and `PORT` are optional and control the dev server bind address.
 
 ## Local Setup
 

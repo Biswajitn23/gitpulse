@@ -76,7 +76,11 @@ function buildRepoContributionsByDate(commitContributionsByRepository) {
   const dateBuckets = new Map();
 
   for (const repoContribution of commitContributionsByRepository || []) {
-    const repository = repoContribution.repository;
+    const repository = repoContribution?.repository;
+    if (!repository?.nameWithOwner) {
+      continue;
+    }
+
     const nodes = repoContribution?.contributions?.nodes || [];
 
     for (const node of nodes) {

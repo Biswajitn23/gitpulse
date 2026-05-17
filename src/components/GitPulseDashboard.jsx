@@ -136,6 +136,36 @@ function sanitizeCredential(value) {
   return placeholderPattern.test(normalized) ? '' : normalized;
 }
 
+function getStorageItem(key) {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function setStorageItem(key, value) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore browsers that block storage.
+  }
+}
+
+function removeStorageItem(key) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore browsers that block storage.
+  }
+}
+
 function pad(value) {
   return String(value).padStart(2, '0');
 }
@@ -214,7 +244,7 @@ function readNotificationCache() {
   if (typeof window === 'undefined') return { sent: {}, forkCounts: {}, totalForks: null };
 
   try {
-    const raw = window.localStorage.getItem(NOTIFICATION_CACHE_KEY);
+    const raw = getStorageItem(NOTIFICATION_CACHE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     return {
       sent: parsed?.sent || {},
@@ -228,7 +258,7 @@ function readNotificationCache() {
 
 function writeNotificationCache(cache) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(cache));
+  setStorageItem(NOTIFICATION_CACHE_KEY, JSON.stringify(cache));
 }
 
 function startOfWeek(date) {
@@ -350,16 +380,16 @@ export default function GitPulseDashboard() {
   const [nowTime, setNowTime] = useState(() => new Date());
   const [authToken, setAuthToken] = useState(() => {
     if (typeof window === 'undefined') return sanitizeCredential(import.meta.env.VITE_GITHUB_TOKEN || '');
-    return sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
+    return sanitizeCredential(getStorageItem(AUTH_STORAGE_KEY) || '');
   });
-  const [restoredAccount, setRestoredAccount] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem(ACCOUNT_STORAGE_KEY) || '');
-  const [restoredAvatar, setRestoredAvatar] = useState(() => typeof window === 'undefined' ? '' : window.localStorage.getItem(ACCOUNT_AVATAR_STORAGE_KEY) || '');
+  const [restoredAccount, setRestoredAccount] = useState(() => typeof window === 'undefined' ? '' : getStorageItem(ACCOUNT_STORAGE_KEY) || '');
+  const [restoredAvatar, setRestoredAvatar] = useState(() => typeof window === 'undefined' ? '' : getStorageItem(ACCOUNT_AVATAR_STORAGE_KEY) || '');
   
   const { data, loading, error, refresh } = useGithubStreak('', authToken);
   const [notificationState, setNotificationState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const [alertsEnabled, setAlertsEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
-    const stored = window.localStorage.getItem(ALERTS_ENABLED_STORAGE_KEY);
+    const stored = getStorageItem(ALERTS_ENABLED_STORAGE_KEY);
     return stored === null ? true : stored === 'true';
   });
   const [activeView, setActiveView] = useState(() => (typeof window !== 'undefined' && window.location.hash === '#profile' ? 'profile' : 'dashboard'));
@@ -383,9 +413,15 @@ export default function GitPulseDashboard() {
   // Memoized Stats
   const progressPercent = useMemo(() => data ? Math.min(100, Math.round((data.currentStreak / DAILY_GOAL) * 100)) : 0, [data]);
   const heatmapYear = nowTime.getFullYear();
+  const todayKey = toDateKey(nowTime);
   const currentMonthLabel = nowTime.toLocaleDateString(undefined, { month: 'long' });
   const heatmapCells = useMemo(() => buildYearContributionCells(data?.contributionDays || [], heatmapYear), [data, heatmapYear]);
   const yearContributionTotal = useMemo(() => (data?.contributionDays || []).filter(d => d.date.startsWith(`${heatmapYear}-`)).reduce((t, d) => t + d.contributionCount, 0), [data, heatmapYear]);
+  const missedDaysCount = useMemo(() => {
+    return (data?.contributionDays || []).filter((day) => {
+      return day.date.startsWith(`${heatmapYear}-`) && day.date <= todayKey && day.contributionCount === 0;
+    }).length;
+  }, [data, heatmapYear, todayKey]);
   const selectedRepos = useMemo(() => {
     if (selectedReposDetailed.length > 0) {
       return selectedReposDetailed;
@@ -482,11 +518,23 @@ export default function GitPulseDashboard() {
     const updateTouchPreference = () => setIsTouchDevice(pointerQuery.matches);
 
     updateTouchPreference();
-    pointerQuery.addEventListener('change', updateTouchPreference);
+    if (typeof pointerQuery.addEventListener === 'function') {
+      pointerQuery.addEventListener('change', updateTouchPreference);
 
-    return () => {
-      pointerQuery.removeEventListener('change', updateTouchPreference);
-    };
+      return () => {
+        pointerQuery.removeEventListener('change', updateTouchPreference);
+      };
+    }
+
+    if (typeof pointerQuery.addListener === 'function') {
+      pointerQuery.addListener(updateTouchPreference);
+
+      return () => {
+        pointerQuery.removeListener(updateTouchPreference);
+      };
+    }
+
+    return undefined;
   }, []);
 
   useEffect(() => {
@@ -509,9 +557,9 @@ export default function GitPulseDashboard() {
     try { auth = getFirebaseAuth(); } catch (e) { setAuthStep('error'); return; }
     return onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      const isExplicitLogout = window.localStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
+      const isExplicitLogout = getStorageItem(EXPLICIT_LOGOUT_KEY) === 'true';
       if (isExplicitLogout) { setAuthToken(''); setAuthStep('idle'); return; }
-      const storedToken = sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
+      const storedToken = sanitizeCredential(getStorageItem(AUTH_STORAGE_KEY) || '');
       if (!user) {
         if (storedToken) {
           setAuthToken(storedToken);
@@ -530,8 +578,8 @@ export default function GitPulseDashboard() {
   }, []);
 
   useEffect(() => {
-    if (authToken) window.localStorage.setItem(AUTH_STORAGE_KEY, authToken);
-    else window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (authToken) setStorageItem(AUTH_STORAGE_KEY, authToken);
+    else removeStorageItem(AUTH_STORAGE_KEY);
   }, [authToken]);
 
   useEffect(() => {
@@ -546,8 +594,8 @@ export default function GitPulseDashboard() {
 
     if (/token is invalid or expired|bad credentials|unauthorized|401/i.test(error)) {
       hasRecoveredUnauthorizedTokenRef.current = true;
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
-      window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      removeStorageItem(AUTH_STORAGE_KEY);
+      removeStorageItem(EXPLICIT_LOGOUT_KEY);
       setAuthToken('');
       setAuthStep('idle');
       setAuthMessage('Your GitHub session expired. Please reconnect your GitHub account.');
@@ -556,14 +604,14 @@ export default function GitPulseDashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(ALERTS_ENABLED_STORAGE_KEY, String(alertsEnabled));
+    setStorageItem(ALERTS_ENABLED_STORAGE_KEY, String(alertsEnabled));
   }, [alertsEnabled]);
 
   useEffect(() => {
     if (!data?.username) return;
-    window.localStorage.setItem(ACCOUNT_STORAGE_KEY, data.username);
+    setStorageItem(ACCOUNT_STORAGE_KEY, data.username);
     if (data.avatarUrl) {
-      window.localStorage.setItem(ACCOUNT_AVATAR_STORAGE_KEY, data.avatarUrl);
+      setStorageItem(ACCOUNT_AVATAR_STORAGE_KEY, data.avatarUrl);
       setRestoredAvatar(data.avatarUrl);
     }
     setRestoredAccount(data.username);
@@ -824,8 +872,8 @@ export default function GitPulseDashboard() {
     e.preventDefault();
     setAuthMessage('');
 
-    const existingToken = sanitizeCredential(window.localStorage.getItem(AUTH_STORAGE_KEY) || '');
-    const isExplicitLogout = window.localStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
+    const existingToken = sanitizeCredential(getStorageItem(AUTH_STORAGE_KEY) || '');
+    const isExplicitLogout = getStorageItem(EXPLICIT_LOGOUT_KEY) === 'true';
     if (existingToken && !isExplicitLogout) {
       setAuthToken(existingToken);
       setAuthStep('signed-in');
@@ -853,11 +901,11 @@ export default function GitPulseDashboard() {
       const token = sanitizeCredential(credential?.accessToken || '');
       const signedInLogin = sanitizeCredential(result?.additionalUserInfo?.profile?.login || '');
 
-      window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      removeStorageItem(EXPLICIT_LOGOUT_KEY);
       if (signedInLogin) {
-        window.localStorage.removeItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
+        removeStorageItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
       }
-      window.localStorage.setItem(AUTH_STORAGE_KEY, token);
+      setStorageItem(AUTH_STORAGE_KEY, token);
       setAuthToken(token);
       setFirebaseUser(result.user);
       setAuthStep('signed-in');
@@ -869,13 +917,13 @@ export default function GitPulseDashboard() {
 
   const handleSignOut = async () => {
     const lastAccount = sanitizeCredential(data?.username || restoredAccount || firebaseUser?.displayName || '');
-    window.localStorage.setItem(EXPLICIT_LOGOUT_KEY, 'true');
+    setStorageItem(EXPLICIT_LOGOUT_KEY, 'true');
     if (lastAccount) {
-      window.localStorage.setItem(LAST_SIGNED_OUT_ACCOUNT_KEY, lastAccount);
+      setStorageItem(LAST_SIGNED_OUT_ACCOUNT_KEY, lastAccount);
     }
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
-    window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
-    window.localStorage.removeItem(ACCOUNT_AVATAR_STORAGE_KEY);
+    removeStorageItem(AUTH_STORAGE_KEY);
+    removeStorageItem(ACCOUNT_STORAGE_KEY);
+    removeStorageItem(ACCOUNT_AVATAR_STORAGE_KEY);
     setFirebaseUser(null); setAuthToken(''); setAuthStep('idle');
     try { await signOut(getFirebaseAuth()); } catch (e) {}
   };
@@ -958,12 +1006,12 @@ export default function GitPulseDashboard() {
           return;
         }
 
-        window.localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+        removeStorageItem(EXPLICIT_LOGOUT_KEY);
         if (signedInLogin) {
-          window.localStorage.removeItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
+          removeStorageItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
         }
 
-        window.localStorage.setItem(AUTH_STORAGE_KEY, token);
+        setStorageItem(AUTH_STORAGE_KEY, token);
         setAuthToken(token);
         setFirebaseUser(result.user);
         setAuthStep('signed-in');
@@ -1143,7 +1191,7 @@ export default function GitPulseDashboard() {
           </div>
         </header>
 
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 sm:gap-6">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6 sm:gap-6">
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-5 transition-all sm:p-8">
             <p className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-400"><Flame className="text-orange-400" /> Current Streak</p>
             <div className="flex items-baseline gap-2">
@@ -1189,6 +1237,13 @@ export default function GitPulseDashboard() {
                 <div><p className="text-[10px] uppercase text-slate-500 font-bold">Issues</p><p className="text-lg font-semibold">{data?.totalIssueContributions ?? 0}</p></div>
             </div>
             <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: GitHub contribution stats</p>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 sm:p-8">
+            <p className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-400"><AlertTriangle className="text-red-400" /> Missed Days</p>
+            <div className="mb-4 text-4xl font-bold text-white sm:text-5xl">{missedDaysCount}</div>
+            <p className="text-sm text-slate-400">Zero-contribution days in {heatmapYear}</p>
+            <p className="mt-4 text-[10px] uppercase tracking-[0.28em] text-slate-500">Source: GitHub contribution calendar</p>
           </div>
 
           <button
