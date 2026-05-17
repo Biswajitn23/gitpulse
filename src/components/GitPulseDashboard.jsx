@@ -25,6 +25,9 @@ const LAST_SIGNED_OUT_ACCOUNT_KEY = 'gitpulse-last-signed-out-account';
 const ALERTS_ENABLED_STORAGE_KEY = 'gitpulse-alerts-enabled';
 const EXPLICIT_LOGOUT_KEY = 'gitpulse-explicit-logout';
 const NOTIFICATION_CACHE_KEY = 'gitpulse-notification-cache';
+const LAST_ACTIVE_AT_KEY = 'gitpulse-last-active-at';
+const SESSION_INACTIVITY_LIMIT_DAYS = 7;
+const SESSION_INACTIVITY_LIMIT_MS = SESSION_INACTIVITY_LIMIT_DAYS * 24 * 60 * 60 * 1000;
 const DAILY_GOAL = 30;
 const ROLE_GUIDE = [
   {
@@ -197,6 +200,39 @@ function clearFirebaseRedirectArtifacts() {
       // Ignore browsers that block storage access.
     }
   }
+}
+
+function clearAuthSessionStorage() {
+  removeStorageItem(AUTH_STORAGE_KEY);
+  removeStorageItem(ACCOUNT_STORAGE_KEY);
+  removeStorageItem(ACCOUNT_AVATAR_STORAGE_KEY);
+  removeStorageItem(LAST_SIGNED_OUT_ACCOUNT_KEY);
+  removeStorageItem(EXPLICIT_LOGOUT_KEY);
+  removeStorageItem(LAST_ACTIVE_AT_KEY);
+}
+
+function getStoredLastActiveAt() {
+  const rawValue = getStorageItem(LAST_ACTIVE_AT_KEY);
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isStoredSessionExpired() {
+  const token = sanitizeCredential(getStorageItem(AUTH_STORAGE_KEY) || '');
+  if (!token) {
+    return false;
+  }
+
+  const lastActiveAt = getStoredLastActiveAt();
+  if (!lastActiveAt) {
+    return true;
+  }
+
+  return Date.now() - lastActiveAt > SESSION_INACTIVITY_LIMIT_MS;
 }
 
 function pad(value) {
@@ -418,10 +454,20 @@ export default function GitPulseDashboard() {
   const [nowTime, setNowTime] = useState(() => new Date());
   const [authToken, setAuthToken] = useState(() => {
     if (typeof window === 'undefined') return sanitizeCredential(import.meta.env.VITE_GITHUB_TOKEN || '');
+    if (isStoredSessionExpired()) {
+      clearAuthSessionStorage();
+      return '';
+    }
     return sanitizeCredential(getStorageItem(AUTH_STORAGE_KEY) || '');
   });
-  const [restoredAccount, setRestoredAccount] = useState(() => typeof window === 'undefined' ? '' : getStorageItem(ACCOUNT_STORAGE_KEY) || '');
-  const [restoredAvatar, setRestoredAvatar] = useState(() => typeof window === 'undefined' ? '' : getStorageItem(ACCOUNT_AVATAR_STORAGE_KEY) || '');
+  const [restoredAccount, setRestoredAccount] = useState(() => {
+    if (typeof window === 'undefined' || isStoredSessionExpired()) return '';
+    return getStorageItem(ACCOUNT_STORAGE_KEY) || '';
+  });
+  const [restoredAvatar, setRestoredAvatar] = useState(() => {
+    if (typeof window === 'undefined' || isStoredSessionExpired()) return '';
+    return getStorageItem(ACCOUNT_AVATAR_STORAGE_KEY) || '';
+  });
   
   const { data, loading, error, refresh } = useGithubStreak('', authToken);
   const [notificationState, setNotificationState] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
@@ -623,6 +669,15 @@ export default function GitPulseDashboard() {
   useEffect(() => {
     if (authToken) setStorageItem(AUTH_STORAGE_KEY, authToken);
     else removeStorageItem(AUTH_STORAGE_KEY);
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) {
+      removeStorageItem(LAST_ACTIVE_AT_KEY);
+      return;
+    }
+
+    setStorageItem(LAST_ACTIVE_AT_KEY, String(Date.now()));
   }, [authToken]);
 
   useEffect(() => {
