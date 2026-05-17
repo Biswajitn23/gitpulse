@@ -166,10 +166,20 @@ function removeStorageItem(key) {
   }
 }
 
+function getAccessibleStorage(type) {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return type === 'session' ? window.sessionStorage : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function clearFirebaseRedirectArtifacts() {
   if (typeof window === 'undefined') return;
 
-  const storageAreas = [window.sessionStorage, window.localStorage];
+  const storageAreas = [getAccessibleStorage('session'), getAccessibleStorage('local')].filter(Boolean);
   const redirectKeyPattern = /(firebase|auth|redirect|pending)/i;
 
   for (const storage of storageAreas) {
@@ -369,10 +379,15 @@ function buildPeakDayStats(days, year) {
 function canUseRedirectAuth() {
   if (typeof window === 'undefined') return false;
 
+  const sessionStorage = getAccessibleStorage('session');
+  if (!sessionStorage) {
+    return false;
+  }
+
   try {
     const probeKey = '__gitpulse_redirect_probe__';
-    window.sessionStorage.setItem(probeKey, '1');
-    window.sessionStorage.removeItem(probeKey);
+    sessionStorage.setItem(probeKey, '1');
+    sessionStorage.removeItem(probeKey);
   } catch {
     return false;
   }
@@ -536,6 +551,11 @@ export default function GitPulseDashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    if (typeof window.matchMedia !== 'function') {
+      setIsTouchDevice(true);
+      return undefined;
+    }
 
     const pointerQuery = window.matchMedia('(hover: none), (pointer: coarse)');
     const updateTouchPreference = () => setIsTouchDevice(pointerQuery.matches);

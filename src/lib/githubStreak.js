@@ -257,7 +257,12 @@ async function fetchSocialAccounts(username, token) {
     return [];
   }
 
-  const payload = await response.json();
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error('GitHub API response could not be parsed.');
+  }
   return Array.isArray(payload) ? payload : [];
 }
 
@@ -492,10 +497,16 @@ export async function fetchGithubStreak(username, tokenInput) {
     throw new Error(useViewer ? 'Unable to load the authenticated GitHub account.' : 'Invalid GitHub username.');
   }
 
-  const contributionCalendar = user.contributionsCollection.contributionCalendar;
-  const contributionStats = user.contributionsCollection;
+  const contributionStats = user?.contributionsCollection;
+  const contributionCalendar = contributionStats?.contributionCalendar;
+
+  if (!contributionStats || !contributionCalendar) {
+    throw new Error('GitHub contributions are unavailable for this account right now.');
+  }
+
+  const commitContributionsByRepository = contributionStats?.commitContributionsByRepository || [];
   const repoContributionsByDate = buildRepoContributionsByDate(
-    user.contributionsCollection.commitContributionsByRepository,
+    commitContributionsByRepository,
   );
   const contributionDays = buildContributionDays(contributionCalendar);
   const dayMap = buildDayMap(contributionDays);
@@ -507,9 +518,9 @@ export async function fetchGithubStreak(username, tokenInput) {
   const totalCommits = contributionCalendar.totalContributions || contributionDays.reduce((total, day) => total + day.contributionCount, 0);
   const socialAccounts = await fetchSocialAccounts(user.login, token);
   const activityRole = getContributionRole(contributionStats);
-  const contributionWindow = buildContributionWindow(user.contributionsCollection.commitContributionsByRepository);
-  const totalImpact = aggregateTopRepositoryImpact(user.contributionsCollection.commitContributionsByRepository);
-  const languageBreakdown = aggregateLanguageBytes(user.contributionsCollection.commitContributionsByRepository);
+  const contributionWindow = buildContributionWindow(commitContributionsByRepository);
+  const totalImpact = aggregateTopRepositoryImpact(commitContributionsByRepository);
+  const languageBreakdown = aggregateLanguageBytes(commitContributionsByRepository);
   const allRepositories = (user.repositories?.nodes || []).map((repository) => ({
     nameWithOwner: repository?.nameWithOwner || 'unknown',
     url: repository?.url || '',
@@ -575,7 +586,7 @@ export async function fetchGithubStreak(username, tokenInput) {
     repoContributionsByDate,
     allRepositories,
     allRepositoriesCount: user.repositories?.totalCount || allRepositories.length,
-    commitContributionsByRepository: user.contributionsCollection.commitContributionsByRepository,
+    commitContributionsByRepository,
     fetchedAt: now.toISOString(),
   };
 }

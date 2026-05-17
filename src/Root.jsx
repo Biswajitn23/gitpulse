@@ -30,7 +30,12 @@ export default function Root() {
       console.log('%c%s', ASCII_BANNER_STYLE, ASCII_BANNER.trim());
     }
 
-    if (window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+    const canUseMatchMedia = typeof window.matchMedia === 'function';
+    const isCoarsePointer = canUseMatchMedia
+      ? window.matchMedia('(hover: none), (pointer: coarse)').matches
+      : true;
+
+    if (isCoarsePointer) {
       return undefined;
     }
 

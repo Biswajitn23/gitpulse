@@ -19,6 +19,10 @@ function getStatusCodeForError(message) {
     return 502;
   }
 
+  if (/response could not be parsed|contributions are unavailable|fetch failed|network/i.test(message)) {
+    return 502;
+  }
+
   return 500;
 }
 
