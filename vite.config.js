@@ -2,6 +2,26 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fetchGithubStreak } from './src/lib/githubStreak.js';
 
+function getStatusCodeForError(message) {
+  if (/missing github token/i.test(message)) {
+    return 400;
+  }
+
+  if (/invalid github username|could not resolve to a user/i.test(message)) {
+    return 404;
+  }
+
+  if (/token is invalid or expired|bad credentials|expired token|requires authentication/i.test(message)) {
+    return 401;
+  }
+
+  if (/api request failed|rate limit|abuse detection/i.test(message)) {
+    return 502;
+  }
+
+  return 500;
+}
+
 function githubStreakApiPlugin() {
   return {
     name: 'github-streak-api',
@@ -36,11 +56,10 @@ function githubStreakApiPlugin() {
           response.setHeader('Content-Type', 'application/json');
           response.end(JSON.stringify({ data }));
         } catch (error) {
-          response.statusCode = 500;
+          const message = error instanceof Error ? error.message : 'Server error.';
+          response.statusCode = getStatusCodeForError(message);
           response.setHeader('Content-Type', 'application/json');
-          response.end(
-            JSON.stringify({ error: error instanceof Error ? error.message : 'Server error.' }),
-          );
+          response.end(JSON.stringify({ error: message }));
         }
       });
     },

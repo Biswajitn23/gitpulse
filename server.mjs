@@ -14,6 +14,26 @@ function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
+function getStatusCodeForError(message) {
+  if (/missing github token/i.test(message)) {
+    return 400;
+  }
+
+  if (/invalid github username|could not resolve to a user/i.test(message)) {
+    return 404;
+  }
+
+  if (/token is invalid or expired|bad credentials|expired token|requires authentication/i.test(message)) {
+    return 401;
+  }
+
+  if (/api request failed|rate limit|abuse detection/i.test(message)) {
+    return 502;
+  }
+
+  return 500;
+}
+
 async function readJsonBody(request) {
   const chunks = [];
 
@@ -61,8 +81,9 @@ const server = http.createServer(async (request, response) => {
       }
     });
   } catch (error) {
-    sendJson(response, 500, {
-      error: error instanceof Error ? error.message : 'Server error.',
+    const message = error instanceof Error ? error.message : 'Server error.';
+    sendJson(response, getStatusCodeForError(message), {
+      error: message,
     });
   }
 });

@@ -166,6 +166,29 @@ function removeStorageItem(key) {
   }
 }
 
+function clearFirebaseRedirectArtifacts() {
+  if (typeof window === 'undefined') return;
+
+  const storageAreas = [window.sessionStorage, window.localStorage];
+  const redirectKeyPattern = /(firebase|auth|redirect|pending)/i;
+
+  for (const storage of storageAreas) {
+    try {
+      const keys = [];
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (key && redirectKeyPattern.test(key)) {
+          keys.push(key);
+        }
+      }
+
+      keys.forEach((key) => storage.removeItem(key));
+    } catch {
+      // Ignore browsers that block storage access.
+    }
+  }
+}
+
 function pad(value) {
   return String(value).padStart(2, '0');
 }
@@ -910,6 +933,13 @@ export default function GitPulseDashboard() {
       setFirebaseUser(result.user);
       setAuthStep('signed-in');
     } catch (e) {
+      if (isMissingRedirectStateError(e)) {
+        clearFirebaseRedirectArtifacts();
+        setAuthStep('idle');
+        setAuthMessage('Mobile browser session expired during sign-in. Please tap Connect GitHub again.');
+        return;
+      }
+
       setAuthStep('error');
       setAuthMessage(e.message || 'Unable to sign in with GitHub.');
     }
@@ -992,6 +1022,10 @@ export default function GitPulseDashboard() {
         return;
       }
 
+      if (!canUseRedirectAuth()) {
+        return;
+      }
+
       try {
         const result = await getRedirectResult(auth);
         if (!isMounted || !result) return;
@@ -1019,8 +1053,9 @@ export default function GitPulseDashboard() {
         if (!isMounted) return;
 
         if (isMissingRedirectStateError(error)) {
+          clearFirebaseRedirectArtifacts();
           setAuthStep('idle');
-          setAuthMessage('Sign-in could not be restored in this PWA session. Tap Connect GitHub again.');
+          setAuthMessage('Sign-in could not be restored in this mobile session. Tap Connect GitHub again.');
           return;
         }
 
